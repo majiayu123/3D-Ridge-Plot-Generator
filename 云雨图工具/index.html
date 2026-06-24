@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>云雨图生成器 — Rain Cloud Plot</title>
+<script src="https://cdn.plot.ly/plotly-3.0.0.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1a1a2e,#2a2a4e);padding:14px 24px;text-align:center;border-bottom:1px solid #333}
+.header h1{font-size:1.3em;background:linear-gradient(90deg,#4fc3f7,#81c784,#fff176);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.container{display:flex;flex-wrap:wrap;gap:12px;padding:12px;max-width:1500px;margin:0 auto;height:calc(100vh - 90px)}
+.panel{background:#16213e;border-radius:10px;padding:14px;border:1px solid #2a3a5e}
+.ctrl{width:340px;min-width:300px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.plot-area{flex:1;min-width:500px}
+#plot{width:100%;height:100%;border-radius:6px}
+label{font-size:0.78em;color:#aaa;font-weight:600}
+input,select,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid #3a4a6e;background:#0f1320;color:#e0e0e0;font-size:0.82em;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#81c784}
+textarea{resize:vertical;font-family:'Consolas',monospace;font-size:0.76em;line-height:1.5;min-height:140px}
+.btn-row{display:flex;gap:6px}
+.btn{padding:8px 16px;border-radius:6px;border:none;font-size:0.85em;font-weight:600;cursor:pointer;flex:1}
+.btn-go{background:linear-gradient(135deg,#81c784,#2e7d32);color:#fff}.btn-go:hover{opacity:0.9}
+.btn-ex{background:#1a3a2e;color:#8ecb6e}.btn-ex:hover{background:#2a5a3e}
+.btn-cl{background:#2a3a5e;color:#ccc}.btn-cl:hover{background:#3a4a7e}
+.btn-save{background:#2a5a9e;color:#fff}.btn-save:hover{background:#3a6ab0}
+.opt-row{display:flex;gap:8px;align-items:center;font-size:0.78em}
+.opt-row input[type="checkbox"]{width:auto;margin-right:4px}
+.opt-row input[type="color"]{width:32px;height:26px;border:1px solid #3a4060;border-radius:4px;padding:1px;background:transparent}
+.opt-row input[type="range"]{width:100px;margin:0 8px}
+.preset-dots{display:flex;flex-wrap:wrap;gap:3px}
+.pdot{width:16px;height:16px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+.pdot:hover{border-color:#fff}
+.info-bar{font-size:0.7em;color:#556;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🌧️ 云雨图生成器 — Rain Cloud Plot</h1>
+  <span style="font-size:0.75em;color:#667">半小提琴(云) + 箱线图 + 抖动散点(雨)</span>
+</div>
+<div class="container">
+  <div class="panel ctrl">
+    <label>📊 数据 <small style="color:#888">(CSV: group, value)</small></label>
+    <textarea id="dataIn" placeholder="group,value
+Control,1.2
+Control,1.5
+Treatment,2.1
+Treatment,2.8
+..."></textarea>
+    <div style="display:flex;gap:6px">
+      <div style="flex:1"><label>🏷️ 标题</label><input id="titleIn" value="Rain Cloud Plot"></div>
+      <div style="flex:1"><label>✍️ X轴</label><input id="xlabelIn" value="Group"></div>
+      <div style="flex:1"><label>📏 Y轴</label><input id="ylabelIn" value="Value"></div>
+    </div>
+    <div class="opt-row">
+      <label><input type="checkbox" id="showCloud" checked> 显示云(半小提琴)</label>
+      <label><input type="checkbox" id="showBox" checked> 显示箱线图</label>
+    </div>
+    <div class="opt-row">
+      <label><input type="checkbox" id="showRain" checked> 显示雨点</label>
+      <span style="color:#aaa">点大小</span><input type="range" id="ptSize" min="2" max="12" value="5">
+      <span style="color:#aaa">抖动</span><input type="range" id="jitter" min="0.1" max="0.8" step="0.05" value="0.35">
+    </div>
+    <div class="opt-row">
+      <span style="color:#aaa">配色:</span>
+      <input type="color" id="color1" value="#4fc3f7">
+      <input type="color" id="color2" value="#ffb74d">
+      <input type="color" id="color3" value="#e57373">
+      <input type="color" id="color4" value="#ba68c8">
+      <input type="color" id="color5" value="#81c784">
+    </div>
+    <div class="preset-dots" id="presets"></div>
+    <div class="btn-row">
+      <button class="btn btn-go" onclick="draw()">🌧️ 生成</button>
+      <button class="btn btn-ex" onclick="loadEx()">📋 示例</button>
+      <button class="btn btn-cl" onclick="clearAll()">🗑️ 清空</button>
+      <button class="btn btn-save" onclick="exportPNG()">📷 导出</button>
+    </div>
+    <div class="info-bar">💡 云 = 数据分布 · 箱 = 四分位数 · 雨 = 每个数据点</div>
+  </div>
+  <div class="panel plot-area"><div id="plot"></div></div>
+</div>
+
+<script>
+const PRESETS = ['#4fc3f7','#ffb74d','#e57373','#ba68c8','#81c784','#ff8a65','#90a4ae','#f06292'];
+const pc = document.getElementById('presets');
+PRESETS.forEach(c => {
+  const d = document.createElement('div'); d.className='pdot'; d.style.background=c;
+  d.title=c; d.onclick=()=>{ document.getElementById('color1').value=c; };
+  pc.appendChild(d);
+});
+
+function parseData(text) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return null;
+  const sep = lines[0].includes('\t') ? '\t' : ',';
+  const groups = {};
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(sep);
+    const g = (cols[0]||'').trim();
+    const v = parseFloat(cols[1]);
+    if (!g || isNaN(v)) continue;
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(v);
+  }
+  const result = Object.entries(groups).map(([k,v]) => ({ name: k, values: v }));
+  return result.length ? result : null;
+}
+
+function draw() {
+  const raw = document.getElementById('dataIn').value.trim();
+  if (!raw) { alert('请先输入数据'); return; }
+  const groups = parseData(raw);
+  if (!groups) { alert('解析失败'); return; }
+
+  const colors = [document.getElementById('color1').value, document.getElementById('color2').value,
+                  document.getElementById('color3').value, document.getElementById('color4').value,
+                  document.getElementById('color5').value];
+  const showCloud = document.getElementById('showCloud').checked;
+  const showBox = document.getElementById('showBox').checked;
+  const showRain = document.getElementById('showRain').checked;
+  const ptSize = parseInt(document.getElementById('ptSize').value);
+  const jitter = parseFloat(document.getElementById('jitter').value);
+
+  const traces = [];
+
+  groups.forEach((g, i) => {
+    const c = colors[i % colors.length];
+    const xCenter = i;
+
+    // 云 — 半小提琴 (左侧)
+    if (showCloud) {
+      traces.push({
+        type: 'violin', y: g.values, name: g.name,
+        side: 'negative', line: { color: c, width: 1.5 },
+        fillcolor: c, opacity: 0.55, points: false,
+        box: { visible: false }, meanline: { visible: false },
+        spanmode: 'soft', width: 0.7,
+        showlegend: true, legendgroup: g.name,
+      });
+    }
+
+    // 箱线图
+    if (showBox) {
+      traces.push({
+        type: 'box', y: g.values, name: g.name,
+        marker: { color: c, size: 4 },
+        line: { color: c, width: 1.5 },
+        fillcolor: c + '30', boxpoints: false,
+        width: 0.2, showlegend: false, legendgroup: g.name,
+      });
+    }
+
+    // 雨点 — 抖动散点 (右侧)
+    if (showRain) {
+      const n = g.values.length;
+      const xArr = [];
+      for (let k = 0; k < n; k++) {
+        xArr.push(xCenter + 0.15 + (Math.random() - 0.5) * jitter * 2);
+      }
+      traces.push({
+        type: 'scatter', y: g.values, x: xArr,
+        mode: 'markers', name: g.name + '',
+        marker: { color: c, size: ptSize, opacity: 0.6,
+                   line: { color: 'rgba(255,255,255,0.4)', width: 0.5 } },
+        showlegend: false, legendgroup: g.name,
+      });
+    }
+  });
+
+  const layout = {
+    title: { text: document.getElementById('titleIn').value, font: { size: 16, color: '#e0e0e0' } },
+    xaxis: {
+      title: document.getElementById('xlabelIn').value,
+      tickvals: groups.map((_, i) => i),
+      ticktext: groups.map(g => g.name),
+      gridcolor: 'rgba(255,255,255,0.06)',
+      range: [-0.7, groups.length - 0.3],
+    },
+    yaxis: { title: document.getElementById('ylabelIn').value, gridcolor: 'rgba(255,255,255,0.08)', zerolinecolor: 'rgba(255,255,255,0.12)' },
+    paper_bgcolor: '#16213e', plot_bgcolor: '#16213e',
+    font: { color: '#ccc' }, margin: { l: 60, r: 20, t: 50, b: 50 },
+    violinmode: 'overlay',
+  };
+
+  Plotly.newPlot('plot', traces, layout, { responsive: true, modeBarButtonsToRemove: ['sendDataToCloud'] });
+}
+
+function loadEx() {
+  document.getElementById('dataIn').value = `group,value
+Control,1.2
+Control,1.5
+Control,0.9
+Control,1.8
+Control,1.1
+Control,1.6
+Control,1.3
+Control,2.0
+Control,0.7
+Control,1.4
+Control,1.9
+Control,1.0
+Control,1.7
+Control,2.2
+Control,0.8
+Treatment A,2.1
+Treatment A,2.8
+Treatment A,1.9
+Treatment A,2.5
+Treatment A,2.3
+Treatment A,3.0
+Treatment A,2.6
+Treatment A,1.7
+Treatment A,2.4
+Treatment A,2.9
+Treatment A,3.3
+Treatment A,2.0
+Treatment A,2.7
+Treatment A,3.1
+Treatment A,1.5
+Treatment B,3.2
+Treatment B,3.5
+Treatment B,2.8
+Treatment B,4.0
+Treatment B,3.1
+Treatment B,3.8
+Treatment B,2.9
+Treatment B,3.6
+Treatment B,3.3
+Treatment B,3.9
+Treatment B,4.2
+Treatment B,2.5
+Treatment B,3.7
+Treatment B,4.5
+Treatment B,3.0`;
+  document.getElementById('titleIn').value = 'Gene Expression — Rain Cloud Plot';
+  document.getElementById('xlabelIn').value = 'Treatment';
+  document.getElementById('ylabelIn').value = 'Expression Level';
+  draw();
+}
+
+function clearAll() { document.getElementById('dataIn').value = ''; Plotly.purge('plot'); }
+
+function exportPNG() {
+  Plotly.downloadImage('plot', { format: 'png', width: 1200, height: 700, filename: '云雨图' });
+}
+
+loadEx();
+</script>
+</body>
+</html>

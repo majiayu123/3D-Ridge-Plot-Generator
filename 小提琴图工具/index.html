@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小提琴图生成器</title>
+<script src="https://cdn.plot.ly/plotly-3.0.0.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#1a1a2e;color:#e0e0e0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1a1a2e,#2a2a4e);padding:10px 20px;text-align:center;border-bottom:1px solid #333}
+.header h1{font-size:1.15em;background:linear-gradient(90deg,#e57373,#ba68c8,#64b5f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.container{display:flex;gap:10px;padding:10px;max-width:1600px;margin:0 auto;height:calc(100vh - 80px)}
+.panel{background:#16213e;border-radius:10px;padding:10px;border:1px solid #2a3a5e}
+.ctrl{width:400px;min-width:380px;display:flex;flex-direction:column;gap:6px;overflow-y:auto}
+.plot-area{flex:1;min-width:450px}
+#plot{width:100%;height:100%;border-radius:6px}
+
+/* 表格输入 */
+.data-table-wrap{max-height:220px;overflow:auto;border:1px solid #3a4a6e;border-radius:6px}
+.data-table{width:100%;border-collapse:collapse;font-size:0.76em}
+.data-table th{background:#1a2035;color:#889;font-weight:600;padding:4px 6px;position:sticky;top:0;z-index:2;text-align:left;font-size:0.85em}
+.data-table th:last-child{text-align:center;width:30px}
+.data-table td{padding:1px 3px;border-bottom:1px solid #1a2035}
+.data-table input{border:none;background:transparent;color:#e0e0e0;width:100%;padding:5px 6px;font-size:0.9em;font-family:inherit;border-radius:2px}
+.data-table input:focus{outline:none;background:#1a2540}
+.data-table .del-cell{text-align:center}
+.data-table .del-cell button{background:transparent;border:none;color:#e57373;cursor:pointer;font-size:1.1em;padding:2px 6px}
+.data-table .del-cell button:hover{color:#f44}
+.add-row-btn{width:100%;padding:5px;border-radius:5px;border:1px dashed #3a5070;background:transparent;color:#889;font-size:0.74em;cursor:pointer;margin-top:2px}
+.add-row-btn:hover{background:#1a2a3a;color:#aaa}
+
+/* 通用 */
+label{font-size:0.74em;color:#aaa;font-weight:600;display:block;margin-bottom:1px}
+.section-label{font-size:0.68em;color:#667;text-transform:uppercase;letter-spacing:1px;border-top:1px solid #222840;padding-top:7px;margin-top:3px}
+input[type="text"],input[type="number"],select{width:100%;padding:6px 8px;border-radius:5px;border:1px solid #3a4a6e;background:#0f1320;color:#e0e0e0;font-size:0.78em;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:#ba68c8}
+.btn-row{display:flex;gap:4px;flex-wrap:wrap}
+.btn{padding:6px 10px;border-radius:5px;border:none;font-size:0.78em;font-weight:600;cursor:pointer;flex:1;min-width:45px;transition:all .15s}
+.btn-go{background:linear-gradient(135deg,#ba68c8,#7b1fa2);color:#fff}.btn-go:hover{opacity:0.85}
+.btn-ex{background:#1a3a2e;color:#8ecb6e}.btn-ex:hover{background:#2a5a3e}
+.btn-cl{background:#2a3a5e;color:#ccc}.btn-cl:hover{background:#3a4a7e}
+.btn-save{background:#2a5a9e;color:#fff}.btn-save:hover{background:#3a6ab0}
+.btn-add{background:#2a6e3f;color:#fff}.btn-add:hover{background:#3a8040}
+.opt-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:0.74em}
+.opt-row label{display:flex;align-items:center;gap:3px;margin:0;font-size:0.9em}
+.opt-row input[type="checkbox"]{width:auto}
+.opt-row input[type="color"]{width:26px;height:20px;border:1px solid #3a4060;border-radius:3px;padding:0;background:transparent;cursor:pointer}
+.opt-row input[type="range"]{width:70px}
+.opt-row input[type="number"]{width:60px;padding:3px 4px;font-size:0.74em}
+.preset-dots{display:flex;flex-wrap:wrap;gap:3px}
+.pdot{width:15px;height:15px;border-radius:50%;cursor:pointer;border:2px solid transparent}
+.pdot:hover{border-color:#fff}
+.info-bar{font-size:0.66em;color:#556}
+.comp-row{display:flex;gap:3px;align-items:center;font-size:0.7em;background:#0f1320;padding:3px 5px;border-radius:4px;margin:1px 0}
+.comp-row select{width:auto;flex:1;font-size:0.82em;padding:2px 3px}
+.comp-row input{width:60px;font-size:0.82em;padding:2px 3px}
+.comp-row .comp-del{color:#e57373;cursor:pointer;padding:0 3px;font-size:1.2em}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🎻 小提琴图生成器</h1>
+  <span style="font-size:0.7em;color:#667">表格输入 | 大分组+子分组 | 散点在小提琴内侧 | 组间比较标注</span>
+</div>
+<div class="container">
+  <div class="panel ctrl">
+    <!-- 表格数据输入 -->
+    <label>📊 数据表格</label>
+    <div class="data-table-wrap">
+      <table class="data-table" id="dataTable">
+        <thead><tr><th>大分组</th><th>子分组</th><th>数值</th><th></th></tr></thead>
+        <tbody id="dataTbody"></tbody>
+      </table>
+    </div>
+    <button class="add-row-btn" id="addDataRowBtn">＋ 添加行</button>
+
+    <!-- 标题 -->
+    <div style="display:flex;gap:4px">
+      <div style="flex:1"><label>🏷️ 标题</label><input type="text" id="titleIn" value="Violin Plot"></div>
+      <div style="flex:2"><input type="text" id="subtitleIn" placeholder="副标题（可选）"></div>
+    </div>
+    <div class="opt-row">
+      <div style="flex:1"><label>✍️ X轴</label><input type="text" id="xlabelIn" value="Group"></div>
+      <div style="flex:1"><label>📏 Y轴</label><input type="text" id="ylabelIn" value="Value"></div>
+    </div>
+    <div class="opt-row">
+      <span style="color:#aaa;font-size:0.74em">Y轴:</span>
+      <input type="number" id="yMinIn" value="-0.5" step="0.5" style="width:60px">
+      <span style="color:#666">~</span>
+      <input type="number" id="yMaxIn" value="7" step="0.5" style="width:60px">
+      <span style="color:#aaa;font-size:0.74em;margin-left:4px">X标签(逗号分隔):</span>
+      <input type="text" id="xTickLabels" placeholder="自定义，留空自动" style="flex:1;font-size:0.72em;padding:4px">
+    </div>
+
+    <!-- 显示 -->
+    <div class="opt-row">
+      <label><input type="checkbox" id="showBox" checked>箱线</label>
+      <label><input type="checkbox" id="showMean" checked>均值</label>
+      <label><input type="checkbox" id="showPoints" checked>散点</label>
+      <span style="color:#aaa">大小</span><input type="range" id="ptSize" min="2" max="10" value="4">
+      <span style="color:#aaa">透明</span><input type="range" id="ptOpacity" min="0.2" max="1" step="0.1" value="0.7">
+      <span style="color:#aaa">抖动</span><input type="range" id="jitter" min="0.1" max="0.7" step="0.05" value="0.35">
+    </div>
+
+    <!-- 配色 -->
+    <div class="opt-row">
+      <span style="color:#aaa;font-size:0.74em">配色(按子分组):</span>
+      <input type="color" id="c0" value="#64b5f6"><input type="color" id="c1" value="#ffb74d">
+      <input type="color" id="c2" value="#e57373"><input type="color" id="c3" value="#ba68c8">
+      <input type="color" id="c4" value="#4dd0e1"><input type="color" id="c5" value="#81c784">
+      <span class="preset-dots" id="presets" style="display:inline-flex;margin-left:4px"></span>
+    </div>
+
+    <!-- 组间比较 -->
+    <div class="section-label">📐 组间比较标注</div>
+    <div id="comparisonsList"></div>
+    <button class="btn btn-add" id="addCompBtn" style="font-size:0.72em">＋ 添加比较对</button>
+    <div class="info-bar" style="text-align:left">每个亚组内，选择两个大分组之间比较。标注栏填p值或***等。</div>
+
+    <!-- 按钮 -->
+    <div class="btn-row">
+      <button class="btn btn-go" onclick="draw()">🎻 生成</button>
+      <button class="btn btn-ex" onclick="loadEx1()">📋 示例1</button>
+      <button class="btn btn-ex" onclick="loadEx2()">📋 示例2</button>
+      <button class="btn btn-cl" onclick="clearAll()">🗑️</button>
+      <button class="btn btn-save" onclick="saveState()">💾</button>
+      <button class="btn btn-save" onclick="loadState()" style="background:#4a6a4e">📂</button>
+      <button class="btn btn-save" onclick="exportPNG()">📷导出</button>
+    </div>
+    <input type="file" id="loadFileInput" accept=".json" style="display:none">
+  </div>
+  <div class="panel plot-area"><div id="plot"></div></div>
+</div>
+
+<script>
+// ====== 预设 ======
+const PRESETS=['#64b5f6','#ffb74d','#e57373','#ba68c8','#4dd0e1','#81c784','#ff8a65','#90a4ae','#f06292','#4db6ac'];
+const pc=document.getElementById('presets');
+PRESETS.forEach(c=>{const d=document.createElement('div');d.className='pdot';d.style.background=c;d.title=c;d.onclick=()=>{document.getElementById('c0').value=c;};pc.appendChild(d);});
+
+let comparisons=[];
+
+// ====== 表格数据管理 ======
+function getTableData() {
+  const rows=document.querySelectorAll('#dataTbody tr');
+  const result=[];
+  rows.forEach(tr=>{
+    const inps=tr.querySelectorAll('input');
+    if(inps.length>=3){
+      const g=inps[0].value.trim(), sg=inps[1].value.trim();
+      const v=parseFloat(inps[2].value);
+      if(g && sg && !isNaN(v)) result.push({group:g, subgroup:sg, value:v});
+    }
+  });
+  return result;
+}
+
+function addDataRow(g,sg,v) {
+  const tbody=document.getElementById('dataTbody');
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td><input value="${g||''}" placeholder="大分组"></td>
+    <td><input value="${sg||''}" placeholder="子分组"></td>
+    <td><input value="${v||''}" placeholder="数值" type="number" step="any"></td>
+    <td class="del-cell"><button title="删除行">×</button></td>`;
+  tr.querySelector('.del-cell button').addEventListener('click',()=>{tr.remove();});
+  tbody.appendChild(tr);
+}
+
+document.getElementById('addDataRowBtn').addEventListener('click',()=>addDataRow('','',''));
+
+// ====== 数据解析 ======
+function parseTableData(rawData) {
+  const map=new Map();
+  rawData.forEach(d=>{
+    const key=d.group+'::'+d.subgroup;
+    if(!map.has(key)) map.set(key,{mainGroup:d.group,subGroup:d.subgroup,values:[]});
+    map.get(key).values.push(d.value);
+  });
+  return [...map.values()];
+}
+
+// ====== 填充表格 ======
+function fillTable(data) {
+  const tbody=document.getElementById('dataTbody');
+  tbody.innerHTML='';
+  data.forEach(d=>addDataRow(d.group,d.subgroup,d.value));
+}
+
+// ====== 构建图表 ======
+function buildPlotOptions(rawData){
+  const items=parseTableData(rawData);
+  const mainGroups=[...new Set(items.map(d=>d.mainGroup))];
+  const subGroups=[...new Set(items.map(d=>d.subGroup))];
+  const colors=['c0','c1','c2','c3','c4','c5'].map(id=>document.getElementById(id).value);
+  const subColorMap={}; subGroups.forEach((sg,i)=>subColorMap[sg]=colors[i%colors.length]);
+
+  const positions=[], tickVals=[], tickTexts=[];
+  let xPos=0;
+  mainGroups.forEach(mg=>{
+    const subs=items.filter(d=>d.mainGroup===mg);
+    const start=xPos;
+    subs.forEach(item=>{positions.push({x:xPos,mainGroup:mg,subGroup:item.subGroup,values:item.values});xPos++;});
+    tickVals.push((start+xPos-1)/2);
+    tickTexts.push(mg);
+    xPos+=0.6;
+  });
+
+  const customLabels=document.getElementById('xTickLabels').value.trim();
+  if(customLabels){
+    const lbs=customLabels.split(',').map(s=>s.trim()).filter(Boolean);
+    lbs.forEach((l,i)=>{if(i<tickTexts.length)tickTexts[i]=l;});
+  }
+
+  return {items,mainGroups,subGroups,subColorMap,positions,tickVals,tickTexts,xPos};
+}
+
+// ====== 绘制 ======
+function draw(){
+  const rawData=getTableData();
+  if(rawData.length===0){alert('请先在表格中输入数据');return;}
+
+  const opts=buildPlotOptions(rawData);
+  const showBox=document.getElementById('showBox').checked;
+  const showMean=document.getElementById('showMean').checked;
+  const showPts=document.getElementById('showPoints').checked;
+  const ptSize=parseInt(document.getElementById('ptSize').value);
+  const ptOpacity=parseFloat(document.getElementById('ptOpacity').value);
+  const jitter=parseFloat(document.getElementById('jitter').value);
+  const yMin=parseFloat(document.getElementById('yMinIn').value);
+  const yMax=parseFloat(document.getElementById('yMaxIn').value);
+
+  const traces=[];
+
+  // 小提琴 (不含内置散点)
+  opts.positions.forEach(pos=>{
+    const c=opts.subColorMap[pos.subGroup];
+    traces.push({
+      type:'violin',x:Array(pos.values.length).fill(pos.x),y:pos.values,
+      name:pos.subGroup,legendgroup:pos.subGroup,scalegroup:pos.subGroup,
+      line:{color:c,width:1.5},fillcolor:c,opacity:0.5,
+      points:false,
+      box:{visible:showBox,line:{color:c,width:1.2},fillcolor:c+'25',width:0.15},
+      meanline:{visible:showMean,color:'rgba(255,255,255,0.7)',width:1.5},
+      spanmode:'soft',width:0.65,
+      showlegend:true,
+      hovertext:pos.mainGroup+' / '+pos.subGroup,
+    });
+  });
+
+  // 散点作为独立scatter叠加在小提琴内侧（确保散点可见）
+  if(showPts){
+    opts.positions.forEach(pos=>{
+      const c=opts.subColorMap[pos.subGroup];
+      const xJittered=pos.values.map(()=>pos.x+(Math.random()-0.5)*jitter*1.2);
+      traces.push({
+        type:'scatter',x:xJittered,y:pos.values,
+        mode:'markers',
+        marker:{size:ptSize,color:c,opacity:ptOpacity,line:{color:'rgba(255,255,255,0.4)',width:0.4}},
+        showlegend:false,
+        hoverinfo:'y',
+      });
+    });
+  }
+
+  // 统计比较括号
+  const allVals=[].concat(...opts.items.map(d=>d.values));
+  const dataTop=Math.max(...allVals);
+  const bracketBase=Math.max(yMax,dataTop)+(yMax-yMin)*0.04;
+  const bracketStep=(yMax-yMin)*0.10;
+
+  comparisons.forEach((comp,ci)=>{
+    const x1=opts.positions.find(p=>p.mainGroup===comp.g1&&p.subGroup===comp.sg1);
+    const x2=opts.positions.find(p=>p.mainGroup===comp.g2&&p.subGroup===comp.sg2);
+    if(!x1||!x2)return;
+    const by=bracketBase+ci*bracketStep;
+
+    // 竖线+横线括号
+    traces.push({
+      type:'scatter',
+      x:[x1.x,x1.x,x2.x,x2.x],
+      y:[dataTop+0.02,by,by,dataTop+0.02],
+      mode:'lines',line:{color:'rgba(255,255,255,0.6)',width:1},
+      showlegend:false,hoverinfo:'none',
+    });
+    // 标注文字
+    traces.push({
+      type:'scatter',
+      x:[(x1.x+x2.x)/2],y:[by+(yMax-yMin)*0.025],
+      mode:'text',text:[comp.label||'ns'],
+      textfont:{size:11,color:'#fff',family:'Arial'},
+      showlegend:false,hoverinfo:'none',
+    });
+  });
+
+  const title=document.getElementById('titleIn').value;
+  const subtitle=document.getElementById('subtitleIn').value;
+  const fullTitle=subtitle?title+'<br><sub>'+subtitle+'</sub>':title;
+
+  Plotly.newPlot('plot',traces,{
+    title:{text:fullTitle,font:{size:16,color:'#e0e0e0'}},
+    xaxis:{
+      title:document.getElementById('xlabelIn').value,
+      tickvals:opts.tickVals,ticktext:opts.tickTexts,
+      tickfont:{size:12,color:'#ccc'},
+      gridcolor:'rgba(255,255,255,0.06)',
+      range:[-0.5,opts.xPos-0.5],
+    },
+    yaxis:{
+      title:document.getElementById('ylabelIn').value,
+      range:[yMin,yMax],
+      gridcolor:'rgba(255,255,255,0.08)',
+      zerolinecolor:'rgba(255,255,255,0.15)',
+    },
+    paper_bgcolor:'#16213e',plot_bgcolor:'#16213e',
+    font:{color:'#ccc'},margin:{l:60,r:20,t:70,b:60},
+    legend:{x:1.02,y:0.98,bgcolor:'rgba(0,0,0,0.3)'},
+  },{responsive:true,modeBarButtonsToRemove:['sendDataToCloud']});
+}
+
+// ====== 比较管理 ======
+function renderComparisons(){
+  const rawData=getTableData();
+  const items=parseTableData(rawData);
+  const mainGroups=[...new Set(items.map(d=>d.mainGroup))];
+  const subGroups=[...new Set(items.map(d=>d.subGroup))];
+
+  const cnt=document.getElementById('comparisonsList');
+  cnt.innerHTML='';
+  comparisons.forEach((comp,idx)=>{
+    const div=document.createElement('div');div.className='comp-row';
+    const s1=document.createElement('select');
+    mainGroups.forEach(g=>{const o=document.createElement('option');o.value=g;o.text=g;if(g===comp.g1)o.selected=true;s1.appendChild(o);});
+    s1.addEventListener('change',()=>{comparisons[idx].g1=s1.value;});
+    const g1=document.createElement('select');
+    subGroups.forEach(sg=>{const o=document.createElement('option');o.value=sg;o.text=sg;if(sg===comp.sg1)o.selected=true;g1.appendChild(o);});
+    g1.addEventListener('change',()=>{comparisons[idx].sg1=g1.value;});
+    const vs=document.createElement('span');vs.textContent='vs';vs.style.color='#667';
+    const s2=document.createElement('select');
+    mainGroups.forEach(g=>{const o=document.createElement('option');o.value=g;o.text=g;if(g===comp.g2)o.selected=true;s2.appendChild(o);});
+    s2.addEventListener('change',()=>{comparisons[idx].g2=s2.value;});
+    const g2=document.createElement('select');
+    subGroups.forEach(sg=>{const o=document.createElement('option');o.value=sg;o.text=sg;if(sg===comp.sg2)o.selected=true;g2.appendChild(o);});
+    g2.addEventListener('change',()=>{comparisons[idx].sg2=g2.value;});
+    const lbl=document.createElement('input');lbl.value=comp.label||'';lbl.placeholder='p/标注';
+    lbl.addEventListener('input',()=>{comparisons[idx].label=lbl.value;});
+    const del=document.createElement('span');del.className='comp-del';del.textContent='×';del.title='删除';
+    del.addEventListener('click',()=>{comparisons.splice(idx,1);renderComparisons();});
+    div.appendChild(s1);div.appendChild(g1);div.appendChild(vs);div.appendChild(s2);div.appendChild(g2);div.appendChild(lbl);div.appendChild(del);
+    cnt.appendChild(div);
+  });
+}
+
+document.getElementById('addCompBtn').addEventListener('click',()=>{
+  const rawData=getTableData();
+  if(rawData.length===0){alert('请先输入数据');return;}
+  const items=parseTableData(rawData);
+  const mg=[...new Set(items.map(d=>d.mainGroup))];
+  const sg=[...new Set(items.map(d=>d.subGroup))];
+  comparisons.push({g1:mg[0]||'',sg1:sg[0]||'',g2:mg[1]||mg[0]||'',sg2:sg[0]||'',label:''});
+  renderComparisons();
+});
+
+// ====== 保存/加载 ======
+function saveState(){
+  const state={
+    v:2,
+    data:getTableData(),
+    title:document.getElementById('titleIn').value,
+    subtitle:document.getElementById('subtitleIn').value,
+    xlabel:document.getElementById('xlabelIn').value,
+    ylabel:document.getElementById('ylabelIn').value,
+    yMin:document.getElementById('yMinIn').value,
+    yMax:document.getElementById('yMaxIn').value,
+    xTickLabels:document.getElementById('xTickLabels').value,
+    showBox:document.getElementById('showBox').checked,
+    showMean:document.getElementById('showMean').checked,
+    showPoints:document.getElementById('showPoints').checked,
+    ptSize:document.getElementById('ptSize').value,
+    ptOpacity:document.getElementById('ptOpacity').value,
+    jitter:document.getElementById('jitter').value,
+    colors:['c0','c1','c2','c3','c4','c5'].map(id=>document.getElementById(id).value),
+    comparisons,
+  };
+  const b=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);
+  a.download='小提琴图存档_'+new Date().toISOString().slice(0,10)+'.json';a.click();
+}
+
+document.getElementById('loadFileInput').addEventListener('change',function(){
+  const f=this.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=function(e){
+    try{
+      const s=JSON.parse(e.target.result);
+      if(s.data){fillTable(s.data);}
+      if(s.title)document.getElementById('titleIn').value=s.title;
+      if(s.subtitle!==undefined)document.getElementById('subtitleIn').value=s.subtitle;
+      if(s.xlabel)document.getElementById('xlabelIn').value=s.xlabel;
+      if(s.ylabel)document.getElementById('ylabelIn').value=s.ylabel;
+      if(s.yMin)document.getElementById('yMinIn').value=s.yMin;
+      if(s.yMax)document.getElementById('yMaxIn').value=s.yMax;
+      if(s.xTickLabels!==undefined)document.getElementById('xTickLabels').value=s.xTickLabels;
+      if(s.showBox!==undefined)document.getElementById('showBox').checked=s.showBox;
+      if(s.showMean!==undefined)document.getElementById('showMean').checked=s.showMean;
+      if(s.showPoints!==undefined)document.getElementById('showPoints').checked=s.showPoints;
+      if(s.ptSize)document.getElementById('ptSize').value=s.ptSize;
+      if(s.ptOpacity)document.getElementById('ptOpacity').value=s.ptOpacity;
+      if(s.jitter)document.getElementById('jitter').value=s.jitter;
+      if(s.colors)s.colors.forEach((c,i)=>{const el=document.getElementById('c'+i);if(el)el.value=c;});
+      if(s.comparisons){comparisons=s.comparisons;renderComparisons();}
+      draw();
+    }catch(err){alert('加载失败:'+err.message);}
+  };
+  r.readAsText(f);this.value='';
+});
+
+function loadState(){document.getElementById('loadFileInput').click();}
+function clearAll(){document.getElementById('dataTbody').innerHTML='';Plotly.purge('plot');comparisons=[];renderComparisons();}
+function exportPNG(){Plotly.downloadImage('plot',{format:'png',width:1400,height:750,filename:'小提琴图'});}
+
+// ====== 示例 ======
+function loadEx1(){
+  const d=[['Control','Male',1.2],['Control','Male',1.5],['Control','Male',0.9],['Control','Male',1.8],['Control','Male',1.1],['Control','Male',1.6],['Control','Male',1.3],['Control','Male',2.0],['Control','Male',0.7],['Control','Male',1.4],['Control','Female',2.1],['Control','Female',2.8],['Control','Female',1.9],['Control','Female',2.5],['Control','Female',2.3],['Control','Female',3.0],['Control','Female',2.6],['Control','Female',1.7],['Control','Female',2.4],['Control','Female',2.9],['Treatment','Male',3.2],['Treatment','Male',3.5],['Treatment','Male',2.8],['Treatment','Male',4.0],['Treatment','Male',3.1],['Treatment','Male',3.8],['Treatment','Male',2.9],['Treatment','Male',3.6],['Treatment','Male',3.3],['Treatment','Male',3.9],['Treatment','Female',4.2],['Treatment','Female',4.8],['Treatment','Female',3.9],['Treatment','Female',4.5],['Treatment','Female',4.3],['Treatment','Female',5.0],['Treatment','Female',4.6],['Treatment','Female',3.7],['Treatment','Female',4.4],['Treatment','Female',4.1]];
+  fillTable(d);
+  document.getElementById('titleIn').value='Gene Expression by Treatment and Sex';
+  document.getElementById('subtitleIn').value='';
+  document.getElementById('xlabelIn').value='Treatment Group';
+  document.getElementById('ylabelIn').value='Expression Level';
+  document.getElementById('yMinIn').value='-0.5';document.getElementById('yMaxIn').value='7';
+  document.getElementById('xTickLabels').value='';
+  comparisons=[{g1:'Control',sg1:'Male',g2:'Treatment',sg2:'Male',label:'p=0.002'},{g1:'Control',sg1:'Female',g2:'Treatment',sg2:'Female',label:'***'}];
+  renderComparisons();draw();
+}
+
+function loadEx2(){
+  const d=[['WT','Leaf',5.2],['WT','Leaf',4.8],['WT','Leaf',5.5],['WT','Leaf',4.9],['WT','Leaf',5.1],['WT','Leaf',5.6],['WT','Leaf',4.7],['WT','Leaf',5.3],['WT','Root',3.1],['WT','Root',2.8],['WT','Root',3.5],['WT','Root',2.9],['WT','Root',3.2],['WT','Root',3.4],['WT','Root',2.7],['WT','Root',3.0],['KO1','Leaf',6.2],['KO1','Leaf',5.8],['KO1','Leaf',6.5],['KO1','Leaf',5.9],['KO1','Leaf',6.1],['KO1','Leaf',6.6],['KO1','Leaf',5.7],['KO1','Leaf',6.3],['KO1','Root',4.2],['KO1','Root',3.8],['KO1','Root',4.5],['KO1','Root',3.9],['KO1','Root',4.3],['KO1','Root',4.1],['KO1','Root',3.7],['KO1','Root',4.0]];
+  fillTable(d);
+  document.getElementById('titleIn').value='Gene Knockout Effect';
+  document.getElementById('subtitleIn').value='WT vs KO in Leaf and Root Tissues';
+  document.getElementById('xlabelIn').value='Genotype';
+  document.getElementById('ylabelIn').value='Expression (FPKM)';
+  document.getElementById('yMinIn').value='2';document.getElementById('yMaxIn').value='7';
+  document.getElementById('xTickLabels').value='WT, KO';
+  comparisons=[{g1:'WT',sg1:'Leaf',g2:'KO1',sg2:'Leaf',label:'**'},{g1:'WT',sg1:'Root',g2:'KO1',sg2:'Root',label:'p=0.015'}];
+  renderComparisons();draw();
+}
+
+loadEx1();
+</script>
+</body>
+</html>

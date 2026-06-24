@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>波浪图编辑器 — 表格波浪 · 三线表 · 自由编辑</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;background:#f5f5f0;color:#222;min-height:100vh;display:flex;flex-direction:column}
+
+/* ====== 工具栏 ====== */
+.toolbar{display:flex;align-items:center;gap:10px;padding:10px 20px;background:#fff;border-bottom:2px solid #ddd;flex-wrap:wrap;position:sticky;top:0;z-index:20;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.toolbar .brand{font-size:1.1em;font-weight:700;color:#333;white-space:nowrap}
+.toolbar input[type="text"]{padding:5px 8px;border-radius:4px;border:1px solid #ccc;background:#fff;color:#333;font-size:0.82em}
+.toolbar input[type="text"]:focus{outline:none;border-color:#4a90d9}
+.toolbar input[type="color"]{width:28px;height:26px;border:1px solid #ccc;border-radius:3px;cursor:pointer;background:#fff;padding:1px}
+.toolbar label{font-size:0.78em;color:#666;white-space:nowrap}
+.toolbar button{padding:6px 14px;border-radius:5px;border:none;font-size:0.82em;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-primary{background:#2a5a9e;color:#fff}.btn-primary:hover{background:#3a6ab0}
+.btn-add{background:#2a7a3f;color:#fff}.btn-add:hover{background:#3a9040}
+.btn-danger{background:#9b3030;color:#fff}.btn-danger:hover{background:#b04040}
+.btn-outline{background:#fff;border:1px solid #bbb;color:#444}.btn-outline:hover{background:#f0f0f0}
+.btn-outline.active{background:#e8f0fe;border-color:#4a90d9;color:#2a5a9e}
+.sep{width:1px;height:18px;background:#ddd;margin:0 2px}
+
+/* ====== 主体 ====== */
+.main{flex:1;overflow:auto;padding:24px 32px;display:flex;flex-direction:column;align-items:center}
+
+/* ====== 表格容器 ====== */
+.table-container{width:100%;max-width:1100px;background:#fff;border-radius:2px;box-shadow:0 1px 8px rgba(0,0,0,0.08);overflow:visible}
+.table-container.three-line{border:none}
+
+/* 三线表样式 */
+table.wave-table{width:100%;border-collapse:collapse;font-size:0.85em}
+table.wave-table th, table.wave-table td{padding:8px 10px;text-align:center;vertical-align:middle;position:relative}
+
+/* 所有单元格保持一致的边框占位，切换时不变 */
+table.wave-table th, table.wave-table td{border:1px solid transparent}
+
+/* 全框表 — 边框可见 */
+table.wave-table.bordered th, table.wave-table.bordered td{border-color:#ccc}
+table.wave-table.bordered{border:2px solid #333}
+
+/* 三线表 — 边框透明，仅表格顶/底和表头下可见 */
+table.wave-table.three-line{border-top:2.5px solid #111;border-bottom:2.5px solid #111}
+table.wave-table.three-line thead th{border-bottom:1px solid #666;font-weight:700;background:#fafafa}
+table.wave-table.three-line th, table.wave-table.three-line td{border-color:transparent}
+table.wave-table.three-line tbody tr:hover{background:#f8f8f5}
+
+/* 表头 */
+table.wave-table thead th{font-weight:600;font-size:0.82em;color:#333;background:#f8f8f5;white-space:nowrap}
+table.wave-table thead th input{font-weight:600;text-align:center;width:100%}
+
+/* 行 */
+table.wave-table tbody tr.wave-row{cursor:pointer;transition:background .15s}
+table.wave-table tbody tr.wave-row:hover{background:#fafaf7}
+table.wave-table tbody tr.wave-row.active{background:#eef4fb}
+table.wave-table tbody tr.wave-row.active td:first-child{box-shadow:inset 3px 0 0 #4a90d9}
+
+/* 行标签 */
+table.wave-table td.row-label{padding:4px 6px;font-weight:500;text-align:left;vertical-align:top;position:relative}
+table.wave-table td.row-label textarea{font-weight:500;text-align:left;width:100%;resize:vertical;overflow-wrap:break-word;word-break:break-all}
+/* 第一列拖拽调节宽度手柄 */
+.col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:10;background:transparent}
+.col-resize-handle:hover,.col-resize-handle.active{background:rgba(74,144,217,0.3)}
+table.wave-table th:first-child{position:relative}
+th .col-resize-handle{position:absolute;right:0;top:0;bottom:0;width:5px;cursor:col-resize;z-index:10;background:transparent}
+th .col-resize-handle:hover,th .col-resize-handle.active{background:rgba(74,144,217,0.3)}
+
+/* 波浪单元格 */
+table.wave-table td.wave-cell{position:relative;padding:4px 0;min-width:300px}
+table.wave-table td.wave-cell canvas{display:block;margin:0 auto;cursor:pointer}
+
+/* 数据单元格 */
+table.wave-table td.data-cell{padding:2px 4px;min-width:70px;vertical-align:top}
+table.wave-table td.data-cell textarea{text-align:center;width:100%;resize:vertical;overflow-wrap:break-word;word-break:break-all}
+
+/* 通用输入 */
+table.wave-table input[type="text"]{border:none;background:transparent;padding:3px 5px;font-size:0.82em;color:#333;font-family:inherit;border-radius:2px;outline:none;width:100%}
+table.wave-table input[type="text"]:hover{background:#f0f0f0}
+table.wave-table input[type="text"]:focus{background:#e8f0fe;box-shadow:inset 0 0 0 1.5px #4a90d9}
+table.wave-table textarea{border:none;background:transparent;padding:3px 5px;font-size:0.82em;color:#333;font-family:inherit;border-radius:2px;outline:none;min-height:28px;line-height:1.4}
+table.wave-table textarea:hover{background:#f0f0f0}
+table.wave-table textarea:focus{background:#e8f0fe;box-shadow:inset 0 0 0 1.5px #4a90d9}
+
+/* 编辑提示 */
+.edit-hint{position:absolute;right:6px;top:6px;font-size:0.65em;color:#999;pointer-events:none;opacity:0;transition:opacity .2s}
+tr.active .edit-hint{opacity:0.7}
+
+/* ====== 右侧浮动控制 ====== */
+.float-panel{position:fixed;right:16px;top:120px;background:#fff;border:1px solid #ddd;border-radius:10px;padding:0;width:200px;box-shadow:0 4px 16px rgba(0,0,0,0.1);z-index:15;display:flex;flex-direction:column;overflow:hidden;cursor:default}
+.float-panel .fp-drag-handle{padding:8px 12px;background:#f0f0f0;cursor:move;user-select:none;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #eee}
+.float-panel .fp-drag-handle span{font-size:0.75em;color:#666}
+.float-panel .fp-drag-handle .fp-dots{color:#aaa;letter-spacing:2px}
+.float-panel .fp-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px}
+.float-panel .fp-title{font-size:0.72em;color:#999;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #eee;padding-bottom:4px}
+.float-panel label{font-size:0.75em;color:#666}
+.float-panel input[type="range"]{width:100%}
+.float-panel .preset-colors{display:flex;flex-wrap:wrap;gap:3px}
+.float-panel .preset-color{width:18px;height:18px;border-radius:3px;cursor:pointer;border:2px solid transparent}
+.float-panel .preset-color:hover{border-color:#999}
+.float-panel .preset-color.active{border-color:#333;box-shadow:0 0 6px rgba(0,0,0,0.2)}
+.float-panel button{width:100%;font-size:0.75em}
+
+/* 底部 */
+.footer-bar{text-align:center;padding:8px;font-size:0.7em;color:#aaa;border-top:1px solid #eee;background:#fff}
+
+/* 提示浮层 */
+.tooltip{position:fixed;background:#333;color:#fff;padding:6px 10px;border-radius:6px;font-size:0.75em;pointer-events:none;z-index:30;opacity:0;transition:opacity .15s;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- 工具栏 -->
+<div class="toolbar">
+  <span class="brand">&#127754; 波浪图编辑器</span>
+  <label>标题:</label>
+  <input type="text" id="mainTitle" value="NOSE Score Meta-Analysis — Distribution by NSD Severity" style="width:280px">
+  <span class="sep"></span>
+  <button class="btn-add" id="addRowBtn">＋ 增加行</button>
+  <button class="btn-add" id="addColBtn" style="background:#2a6a8f">＋ 增加列</button>
+  <button class="btn-danger" id="delRowBtn">− 删除行</button>
+  <button class="btn-danger" id="delColBtn" style="background:#8b4040">− 删除列</button>
+  <span class="sep"></span>
+  <button class="btn-outline active" id="threeLineBtn" title="三线表格式切换">📐 三线表</button>
+  <button class="btn-outline" id="gridLineBtn">📋 全框表</button>
+  <span class="sep"></span>
+  <button class="btn-primary" id="saveBtn">💾 保存</button>
+  <button class="btn-outline" id="loadBtn">📂 加载</button>
+  <input type="file" id="loadFileInput" accept=".json" style="display:none">
+  <span class="sep"></span>
+  <button class="btn-primary" id="exportBtn">📷 导出PNG</button>
+  <button class="btn-outline" id="resetBtn">↺ 重置</button>
+</div>
+
+<!-- 主体 -->
+<div class="main">
+  <div class="table-container three-line" id="tableContainer">
+    <table class="wave-table three-line" id="waveTable">
+      <thead id="tableHead"></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 浮动面板 -->
+<div class="float-panel" id="floatPanel">
+  <div class="fp-drag-handle" id="fpDragHandle">
+    <span>🎨 波浪设置</span>
+    <span class="fp-dots">⋮⋮</span>
+  </div>
+  <div class="fp-body">
+  <label>当前行颜色</label>
+  <div style="display:flex;align-items:center;gap:6px">
+    <input type="color" id="rowColor" value="#4a90d9">
+    <span id="colorHex" style="font-size:0.75em;color:#666">#4a90d9</span>
+  </div>
+  <div class="preset-colors" id="presetColors"></div>
+  <label>平滑度 <span id="smoothVal">0.50</span></label>
+  <input type="range" id="smoothness" min="0" max="1" step="0.05" value="0.5">
+  <label>线宽 <span id="lineWidthVal">2.5</span></label>
+  <input type="range" id="lineWidth" min="1" max="5" step="0.5" value="2.5">
+  <label>Y轴范围</label>
+  <div style="display:flex;gap:4px">
+    <input type="number" id="yMinInput" value="-1.5" step="0.1" style="width:60px;font-size:0.75em;padding:2px 4px;border:1px solid #ccc;border-radius:3px">
+    <span style="color:#999">~</span>
+    <input type="number" id="yMaxInput" value="0.8" step="0.1" style="width:60px;font-size:0.75em;padding:2px 4px;border:1px solid #ccc;border-radius:3px">
+  </div>
+  <button class="btn-outline" id="resetWaveBtn" style="font-size:0.75em">↺ 重置当前行波浪</button>
+  </div>
+</div>
+
+<!-- 提示浮层 -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ============================================================
+// 波浪图编辑器 v2 — 表格 + 横向波浪 + 三线表
+// ============================================================
+
+const PRESET_COLORS = [
+  '#4a90d9','#4dd0b8','#81c784','#ffb74d','#e57373',
+  '#ba68c8','#ff8a65','#5c9cbe','#90a4ae','#f06292',
+];
+
+// ====== 数据模型 ======
+// rows: [{ label, color, points: [{x, y}], cells: [text, ...] }]
+// columns: [{ header }] — 不包括行标签列和波浪列
+let rowData = [];
+let colHeaders = ['Group A', 'Group B', 'Group C', 'Group D'];
+let waveHeaderText = 'Wave / Distribution';
+let activeRow = 0;
+let colWidths = []; // 所有列宽度，初始化在initData中
+let yMin = -1.5, yMax = 0.8;
+let smoothness = 0.5, lineW = 2.5;
+let threeLineMode = true;
+let rowColors = ['#4a90d9', '#ffb74d', '#e57373', '#ba68c8', '#4dd0b8'];
+
+function defaultPoints() {
+  return [
+    { x: 0.05, y: -0.08 },
+    { x: 0.25, y: -0.28 },
+    { x: 0.45, y: 0.05 },
+    { x: 0.60, y: -0.12 },
+    { x: 0.80, y: -0.20 },
+    { x: 0.95, y: -0.04 },
+  ];
+}
+
+function initData() {
+  rowData = [
+    { label: '0-5mm NSD',   color: '#4a90d9', points: defaultPoints().map(p => ({...p})), cells: ['-0.10', '-0.05', '0.08', '-0.02'] },
+    { label: '5-10mm NSD',  color: '#ffb74d', points: defaultPoints().map(p => ({x: p.x, y: p.y - 0.12})), cells: ['-0.24', '-0.30', '', '-0.26'] },
+    { label: '10-15mm NSD', color: '#e57373', points: defaultPoints().map(p => ({x: p.x, y: p.y - 0.30})), cells: ['-0.55', '', '', '-0.55'] },
+    { label: '>15mm NSD',   color: '#ba68c8', points: defaultPoints().map(p => ({x: p.x, y: p.y - 0.50})), cells: ['-0.70', '', '', '-0.70'] },
+    { label: 'Pooled',      color: '#4dd0b8', points: defaultPoints().map(p => ({x: p.x, y: p.y - 0.08})), cells: ['-0.11', '', '', '-0.11'] },
+  ];
+  colHeaders = ['Zhao 2024', 'Wang 2023', 'Li 2022', 'Pooled'];
+  colWidths = [100, 350, 90, 90, 90, 90, 36]; // rowLabel, wave, dataCols..., delBtn
+  activeRow = 0;
+  updateColorUI();
+}
+
+// ====== 渲染表格 ======
+function renderTable() {
+  const thead = document.getElementById('tableHead');
+  const tbody = document.getElementById('tableBody');
+  const table = document.getElementById('waveTable');
+  const container = document.getElementById('tableContainer');
+
+  // 表格样式
+  table.className = 'wave-table ' + (threeLineMode ? 'three-line' : 'bordered');
+  container.className = 'table-container' + (threeLineMode ? ' three-line' : '');
+
+  // 表头
+  // 确保colWidths长度匹配
+  const totalCols = 1 + 1 + colHeaders.length + 1; // rowLabel + wave + dataCols + delBtn
+  while (colWidths.length < totalCols) colWidths.push(colWidths.length === 0 ? 100 : colWidths.length === 1 ? 350 : 90);
+  if (colWidths.length > totalCols) colWidths = colWidths.slice(0, totalCols - 1);
+  // 删除按钮列固定宽度
+  if (colWidths.length < totalCols) colWidths.push(36);
+
+  let headHTML = `<tr>`;
+  // 角标列
+  headHTML += `<th style="width:${colWidths[0]}px;position:relative"><input type="text" id="cornerHeader" value="Study" placeholder="行标"><div class="col-resize-handle" data-col="0"></div></th>`;
+  // 波浪列
+  headHTML += `<th style="width:${colWidths[1]}px;position:relative"><input type="text" id="waveHeaderInput" value="${waveHeaderText}" placeholder="波浪列表头"><div class="col-resize-handle" data-col="1"></div></th>`;
+  // 数据列
+  colHeaders.forEach((h, ci) => {
+    const cidx = 2 + ci;
+    headHTML += `<th style="width:${colWidths[cidx]}px;position:relative"><input type="text" class="col-header-inp" data-ci="${ci}" value="${h}" placeholder="列${ci+1}"><div class="col-resize-handle" data-col="${cidx}"></div></th>`;
+  });
+  // 删除按钮列
+  headHTML += `<th style="width:${colWidths[totalCols-1]}px"></th></tr>`;
+  thead.innerHTML = headHTML;
+
+  // 表体
+  tbody.innerHTML = '';
+  rowData.forEach((row, ri) => {
+    const tr = document.createElement('tr');
+    tr.className = 'wave-row' + (ri === activeRow ? ' active' : '');
+    tr.dataset.ri = ri;
+
+    // 行标签
+    tr.innerHTML += `<td class="row-label" style="width:${colWidths[0]}px">
+      <textarea class="row-label-inp" data-ri="${ri}" placeholder="行${ri+1}" rows="1">${row.label}</textarea>
+      <div class="col-resize-handle" data-col="0"></div>
+    </td>`;
+
+    // 波浪单元格
+    tr.innerHTML += `<td class="wave-cell" data-ri="${ri}" style="width:${colWidths[1]}px">
+      <canvas class="wave-canvas" data-ri="${ri}" width="600" height="70"></canvas>
+      <div class="edit-hint">✋ 点击波浪空白添加点 | 拖拽控制点编辑 | 双击控制点删除</div>
+      <div class="col-resize-handle" data-col="1"></div>
+    </td>`;
+
+    // 数据单元格
+    const totalCols = colWidths.length;
+    for (let ci = 0; ci < colHeaders.length; ci++) {
+      const val = (row.cells && ci < row.cells.length) ? row.cells[ci] : '';
+      const cidx = 2 + ci;
+      tr.innerHTML += `<td class="data-cell" style="width:${colWidths[cidx]}px">
+        <textarea class="data-inp" data-ri="${ri}" data-ci="${ci}" placeholder="-" rows="1">${val}</textarea>
+        <div class="col-resize-handle" data-col="${cidx}"></div>
+      </td>`;
+    }
+
+    // 删除行按钮
+    tr.innerHTML += `<td style="padding:2px;width:${colWidths[totalCols-1]}px">
+      <button class="row-del-x" data-ri="${ri}" style="border:none;background:transparent;color:#ccc;cursor:pointer;font-size:14px;padding:2px 6px" title="删除此行">×</button>
+    </td>`;
+
+    tbody.appendChild(tr);
+  });
+
+  // 绑定事件
+  bindTableEvents();
+  // 绘制所有波浪
+  setTimeout(drawAllWaves, 50);
+}
+
+function bindTableEvents() {
+  // 行点击
+  document.querySelectorAll('.wave-row').forEach(tr => {
+    tr.addEventListener('click', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON') return;
+      activeRow = parseInt(this.dataset.ri);
+      updateActiveRowUI();
+    });
+  });
+
+  // 列标题输入
+  document.querySelectorAll('.col-header-inp').forEach(inp => {
+    inp.addEventListener('input', function() {
+      colHeaders[parseInt(this.dataset.ci)] = this.value;
+    });
+  });
+
+  // 行标签输入
+  document.querySelectorAll('.row-label-inp').forEach(inp => {
+    inp.addEventListener('input', function() {
+      rowData[parseInt(this.dataset.ri)].label = this.value;
+    });
+  });
+
+  // 数据单元格输入
+  document.querySelectorAll('.data-inp').forEach(inp => {
+    inp.addEventListener('input', function() {
+      const ri = parseInt(this.dataset.ri);
+      const ci = parseInt(this.dataset.ci);
+      if (!rowData[ri].cells) rowData[ri].cells = [];
+      while (rowData[ri].cells.length <= ci) rowData[ri].cells.push('');
+      rowData[ri].cells[ci] = this.value;
+    });
+  });
+
+  // 删除行按钮
+  document.querySelectorAll('.row-del-x').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (rowData.length <= 1) return;
+      const ri = parseInt(this.dataset.ri);
+      rowData.splice(ri, 1);
+      if (activeRow >= rowData.length) activeRow = rowData.length - 1;
+      renderTable();
+    });
+  });
+
+  // 波浪画布事件
+  document.querySelectorAll('.wave-canvas').forEach(canvas => {
+    canvas.addEventListener('click', function(e) {
+      const ri = parseInt(this.dataset.ri);
+      activeRow = ri;
+      updateActiveRowUI();
+      handleWaveClick(ri, e);
+    });
+    canvas.addEventListener('dblclick', function(e) {
+      const ri = parseInt(this.dataset.ri);
+      handleWaveDblClick(ri, e);
+    });
+    canvas.addEventListener('mousedown', function(e) {
+      const ri = parseInt(this.dataset.ri);
+      activeRow = ri;
+      updateActiveRowUI();
+      handleWaveMouseDown(ri, e);
+    });
+    canvas.addEventListener('mousemove', function(e) {
+      handleWaveMouseMove(e);
+    });
+    canvas.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      const ri = parseInt(this.dataset.ri);
+      activeRow = ri;
+      updateActiveRowUI();
+      handleWaveRightClick(ri, e);
+    });
+  });
+
+  // 角标
+  const corner = document.getElementById('cornerHeader');
+  if (corner) {
+    corner.addEventListener('input', function() {
+      // just for display
+    });
+  }
+
+  // 波浪列表头
+  const waveHdr = document.getElementById('waveHeaderInput');
+  if (waveHdr) {
+    waveHdr.addEventListener('input', function() {
+      waveHeaderText = this.value;
+    });
+  }
+}
+
+function updateActiveRowUI() {
+  document.querySelectorAll('.wave-row').forEach(tr => {
+    tr.classList.toggle('active', parseInt(tr.dataset.ri) === activeRow);
+  });
+  updateColorUI();
+  // 重绘波浪以反映活动行变化
+  drawAllWaves();
+}
+
+function updateColorUI() {
+  if (activeRow >= 0 && activeRow < rowData.length) {
+    document.getElementById('rowColor').value = rowData[activeRow].color;
+    document.getElementById('colorHex').textContent = rowData[activeRow].color;
+    updatePresetActive();
+  }
+}
+
+// ====== 波浪绘制 ======
+function drawAllWaves() {
+  document.querySelectorAll('.wave-canvas').forEach(canvas => {
+    const ri = parseInt(canvas.dataset.ri);
+    if (ri >= rowData.length) return;
+    drawWave(canvas, rowData[ri], ri === activeRow);
+  });
+}
+
+function drawWave(canvas, row, isActive) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width - 20;
+  const h = 70;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const padL = 12, padR = 12, padT = 12, padB = 12;
+  const pw = w - padL - padR;
+  const ph = h - padT - padB;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // 背景零线
+  const zeroY = padT + ph * (1 - (0 - yMin) / (yMax - yMin));
+  if (zeroY > padT && zeroY < padT + ph) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(padL, zeroY);
+    ctx.lineTo(w - padR, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = '#999';
+    ctx.font = '9px "Segoe UI"';
+    ctx.textAlign = 'left';
+    ctx.fillText('0', padL + 2, zeroY - 3);
+  }
+
+  // 裁剪区域
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(padL, padT, pw, ph);
+  ctx.clip();
+
+  // 样条计算
+  const pts = row.points;
+  const spline = getSplinePoints(pts);
+
+  // 填充
+  ctx.fillStyle = row.color + '15';
+  ctx.beginPath();
+  let first = dataToCanvas(pts[0].x, pts[0].y, padL, pw, padT, ph);
+  ctx.moveTo(first.x, first.y);
+  for (const sp of spline) {
+    const s = dataToCanvas(sp.x, sp.y, padL, pw, padT, ph);
+    ctx.lineTo(s.x, s.y);
+  }
+  let last = dataToCanvas(pts[pts.length - 1].x, pts[pts.length - 1].y, padL, pw, padT, ph);
+  ctx.lineTo(last.x, padT + ph);
+  ctx.lineTo(first.x, padT + ph);
+  ctx.closePath();
+  ctx.fill();
+
+  // 曲线
+  ctx.strokeStyle = row.color;
+  ctx.lineWidth = lineW;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = row.color;
+  ctx.shadowBlur = isActive ? 6 : 3;
+  ctx.beginPath();
+  first = dataToCanvas(pts[0].x, pts[0].y, padL, pw, padT, ph);
+  ctx.moveTo(first.x, first.y);
+  for (const sp of spline) {
+    const s = dataToCanvas(sp.x, sp.y, padL, pw, padT, ph);
+    ctx.lineTo(s.x, s.y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // 控制点 — 所有行始终显示
+  pts.forEach((p, pi) => {
+    const s = dataToCanvas(p.x, p.y, padL, pw, padT, ph);
+    // 外层光晕
+    ctx.fillStyle = isActive ? row.color + '60' : row.color + '30';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    // 内层实心点（大小与拖拽时一致，始终显示）
+    ctx.fillStyle = row.color;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+function dataToCanvas(dx, dy, padL, pw, padT, ph) {
+  return {
+    x: padL + dx * pw,
+    y: padT + ph * (1 - (dy - yMin) / (yMax - yMin)),
+  };
+}
+
+function canvasToData(cx, cy, padL, pw, padT, ph) {
+  return {
+    x: (cx - padL) / pw,
+    y: yMax - (cy - padT) / ph * (yMax - yMin),
+  };
+}
+
+function getSplinePoints(points) {
+  if (points.length < 2) return points.slice();
+  const n = points.length;
+  const pts = [points[0], ...points, points[n - 1]];
+  const result = [];
+  const steps = Math.round(12 + smoothness * 48);
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1], p2 = pts[i + 2], p3 = pts[i + 3] || p2;
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      const t2 = t * t, t3 = t2 * t;
+      result.push({
+        x: 0.5 * ((-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3 + (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 + (-p0.x + p2.x) * t) + p1.x,
+        y: 0.5 * ((-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3 + (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 + (-p0.y + p2.y) * t) + p1.y,
+      });
+    }
+  }
+  result.push(points[n - 1]);
+  return result;
+}
+
+// ====== 波浪交互 ======
+let waveDrag = null;
+
+function getCanvasParams(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width / dpr;
+  const h = canvas.height / dpr;
+  const padL = 12, padR = 12, padT = 10, padB = 10;
+  return { w, h, padL, padR, padT, padB, pw: w - padL - padR, ph: h - padT - padB };
+}
+
+function handleWaveClick(ri, e) {
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const p = getCanvasParams(canvas);
+
+  // 检查是否点击了控制点
+  const row = rowData[ri];
+  const hit = findNearPoint(row.points, cx, cy, p);
+  if (hit >= 0) {
+    // 点击控制点 - 开始拖拽
+    waveDrag = { ri, pi: hit, canvas, p };
+    e.preventDefault();
+    return;
+  }
+
+  // 点击空白处 - 添加点位
+  const data = canvasToData(cx, cy, p.padL, p.pw, p.padT, p.ph);
+  let nx = Math.max(0.02, Math.min(0.98, data.x));
+  let ny = Math.max(yMin, Math.min(yMax, data.y));
+  let idx = row.points.length;
+  for (let i = 0; i < row.points.length; i++) {
+    if (row.points[i].x > nx) { idx = i; break; }
+  }
+  row.points.splice(idx, 0, { x: nx, y: ny });
+  activeRow = ri;
+  updateActiveRowUI();
+  drawAllWaves();
+}
+
+function handleWaveDblClick(ri, e) {
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const p = getCanvasParams(canvas);
+  const row = rowData[ri];
+  const hit = findNearPoint(row.points, cx, cy, p);
+
+  // 双击控制点 - 删除
+  if (hit >= 0 && row.points.length > 2) {
+    row.points.splice(hit, 1);
+    activeRow = ri;
+    updateActiveRowUI();
+    drawAllWaves();
+    return;
+  }
+
+  // 双击空白处 - 添加点位
+  const data = canvasToData(cx, cy, p.padL, p.pw, p.padT, p.ph);
+  let nx = Math.max(0.02, Math.min(0.98, data.x));
+  let ny = Math.max(yMin, Math.min(yMax, data.y));
+  let idx = row.points.length;
+  for (let i = 0; i < row.points.length; i++) {
+    if (row.points[i].x > nx) { idx = i; break; }
+  }
+  row.points.splice(idx, 0, { x: nx, y: ny });
+  activeRow = ri;
+  updateActiveRowUI();
+  drawAllWaves();
+}
+
+function handleWaveMouseDown(ri, e) {
+  if (e.button !== 0) return;
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const p = getCanvasParams(canvas);
+  const row = rowData[ri];
+  const hit = findNearPoint(row.points, cx, cy, p);
+
+  if (hit >= 0) {
+    waveDrag = { ri, pi: hit, canvas, p };
+    canvas.style.cursor = 'grabbing';
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}
+
+function handleWaveMouseMove(e) {
+  if (!waveDrag) return;
+  // 拖拽时不实时更新 — 只记录鼠标位置，等松手再更新
+  waveDrag._lastMove = { x: e.clientX, y: e.clientY };
+}
+
+function handleWaveRightClick(ri, e) {
+  e.preventDefault();
+  const canvas = e.target;
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const p = getCanvasParams(canvas);
+  const row = rowData[ri];
+  const hit = findNearPoint(row.points, cx, cy, p);
+
+  if (hit >= 0 && row.points.length > 2) {
+    row.points.splice(hit, 1);
+    activeRow = ri;
+    updateActiveRowUI();
+    drawAllWaves();
+  }
+}
+
+function findNearPoint(points, cx, cy, p) {
+  for (let i = 0; i < points.length; i++) {
+    const s = dataToCanvas(points[i].x, points[i].y, p.padL, p.pw, p.padT, p.ph);
+    if (Math.hypot(s.x - cx, s.y - cy) < 10) return i;
+  }
+  return -1;
+}
+
+// 全局mouseup — 松手时才把点位移动到最终位置
+window.addEventListener('mouseup', () => {
+  if (waveDrag) {
+    const canvas = waveDrag.canvas;
+    if (waveDrag._lastMove) {
+      const rect = canvas.getBoundingClientRect();
+      const cx = waveDrag._lastMove.x - rect.left;
+      const cy = waveDrag._lastMove.y - rect.top;
+      const p = waveDrag.p;
+      const data = canvasToData(cx, cy, p.padL, p.pw, p.padT, p.ph);
+      const ri = waveDrag.ri;
+      const row = rowData[ri];
+      let ny = Math.max(yMin, Math.min(yMax, data.y));
+      let nx = Math.max(0.02, Math.min(0.98, data.x));
+      const pi = waveDrag.pi;
+      if (pi > 0 && nx <= row.points[pi - 1].x + 0.01) nx = row.points[pi - 1].x + 0.01;
+      if (pi < row.points.length - 1 && nx >= row.points[pi + 1].x - 0.01) nx = row.points[pi + 1].x - 0.01;
+      row.points[pi].x = nx;
+      row.points[pi].y = ny;
+    }
+    canvas.style.cursor = 'default';
+    waveDrag = null;
+    updateActiveRowUI();
+    drawAllWaves();
+  }
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (waveDrag) handleWaveMouseMove(e);
+});
+
+// ====== 按钮事件 ======
+document.getElementById('addRowBtn').addEventListener('click', () => {
+  const nc = colHeaders.length;
+  rowData.push({
+    label: `Row ${rowData.length + 1}`,
+    color: PRESET_COLORS[rowData.length % PRESET_COLORS.length],
+    points: defaultPoints().map(p => ({...p})),
+    cells: Array(nc).fill(''),
+  });
+  activeRow = rowData.length - 1;
+  renderTable();
+  updateColorUI();
+});
+
+document.getElementById('addColBtn').addEventListener('click', () => {
+  colHeaders.push(`Col ${colHeaders.length + 1}`);
+  rowData.forEach(row => {
+    if (!row.cells) row.cells = [];
+    row.cells.push('');
+  });
+  renderTable();
+});
+
+document.getElementById('delRowBtn').addEventListener('click', () => {
+  if (rowData.length <= 1) return;
+  rowData.splice(activeRow, 1);
+  if (activeRow >= rowData.length) activeRow = rowData.length - 1;
+  renderTable();
+  updateColorUI();
+});
+
+document.getElementById('delColBtn').addEventListener('click', () => {
+  if (colHeaders.length <= 1) return;
+  colHeaders.pop();
+  rowData.forEach(row => {
+    if (row.cells) row.cells.pop();
+  });
+  renderTable();
+});
+
+document.getElementById('threeLineBtn').addEventListener('click', () => {
+  threeLineMode = true;
+  document.getElementById('threeLineBtn').classList.add('active');
+  document.getElementById('gridLineBtn').classList.remove('active');
+  renderTable();
+});
+
+document.getElementById('gridLineBtn').addEventListener('click', () => {
+  threeLineMode = false;
+  document.getElementById('gridLineBtn').classList.add('active');
+  document.getElementById('threeLineBtn').classList.remove('active');
+  renderTable();
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  if (confirm('确定重置所有数据？')) {
+    initData();
+    renderTable();
+  }
+});
+
+document.getElementById('resetWaveBtn').addEventListener('click', () => {
+  if (activeRow >= 0 && activeRow < rowData.length) {
+    rowData[activeRow].points = defaultPoints().map(p => ({...p}));
+    drawAllWaves();
+  }
+});
+
+document.getElementById('rowColor').addEventListener('input', (e) => {
+  if (activeRow >= 0 && activeRow < rowData.length) {
+    rowData[activeRow].color = e.target.value;
+    document.getElementById('colorHex').textContent = e.target.value;
+    updatePresetActive();
+    drawAllWaves();
+  }
+});
+
+document.getElementById('smoothness').addEventListener('input', (e) => {
+  smoothness = parseFloat(e.target.value);
+  document.getElementById('smoothVal').textContent = smoothness.toFixed(2);
+  drawAllWaves();
+});
+
+document.getElementById('lineWidth').addEventListener('input', (e) => {
+  lineW = parseFloat(e.target.value);
+  document.getElementById('lineWidthVal').textContent = lineW.toFixed(1);
+  drawAllWaves();
+});
+
+document.getElementById('yMinInput').addEventListener('change', function() {
+  yMin = parseFloat(this.value);
+  drawAllWaves();
+});
+document.getElementById('yMaxInput').addEventListener('change', function() {
+  yMax = parseFloat(this.value);
+  drawAllWaves();
+});
+
+// 标题变化时不需要重绘
+document.getElementById('mainTitle').addEventListener('input', function() {
+  // 标题只用导出时显示
+});
+
+// ====== 预设颜色 ======
+function renderPresetColors() {
+  const cnt = document.getElementById('presetColors');
+  cnt.innerHTML = '';
+  PRESET_COLORS.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'preset-color';
+    div.style.background = c;
+    div.title = c;
+    if (activeRow >= 0 && activeRow < rowData.length && c === rowData[activeRow].color) {
+      div.classList.add('active');
+    }
+    div.addEventListener('click', () => {
+      if (activeRow >= 0 && activeRow < rowData.length) {
+        rowData[activeRow].color = c;
+        document.getElementById('rowColor').value = c;
+        document.getElementById('colorHex').textContent = c;
+        updatePresetActive();
+        drawAllWaves();
+      }
+    });
+    cnt.appendChild(div);
+  });
+}
+
+function updatePresetActive() {
+  document.querySelectorAll('.preset-color').forEach(el => {
+    if (activeRow >= 0 && activeRow < rowData.length) {
+      el.classList.toggle('active', el.style.background === rowData[activeRow].color);
+    }
+  });
+}
+
+// ====== 保存 / 加载 ======
+function getFullState() {
+  return {
+    version: 3,
+    rowData: rowData.map(r => ({
+      label: r.label,
+      color: r.color,
+      points: r.points.map(p => ({ x: p.x, y: p.y })),
+      cells: r.cells ? [...r.cells] : [],
+    })),
+    colHeaders: [...colHeaders],
+    colWidths: [...colWidths],
+    waveHeaderText,
+    yMin, yMax,
+    smoothness, lineW,
+    threeLineMode,
+    title: document.getElementById('mainTitle').value,
+  };
+}
+
+function restoreFullState(state) {
+  if (!state || !state.rowData) { alert('无效的存档文件，请检查文件内容'); return; }
+  try {
+    rowData = state.rowData.map(r => ({
+      label: r.label || '',
+      color: r.color || '#4a90d9',
+      points: (r.points && r.points.length >= 2) ? r.points.map(p => ({ x: p.x, y: p.y })) : defaultPoints(),
+      cells: r.cells ? [...r.cells] : [],
+    }));
+    colHeaders = state.colHeaders ? [...state.colHeaders] : ['A', 'B', 'C', 'D'];
+    colWidths = state.colWidths ? [...state.colWidths] : [100, 350, 90, 90, 90, 90, 36];
+    waveHeaderText = state.waveHeaderText || 'Wave / Distribution';
+    yMin = state.yMin !== undefined ? state.yMin : -1.5;
+    yMax = state.yMax !== undefined ? state.yMax : 0.8;
+    smoothness = state.smoothness !== undefined ? state.smoothness : 0.5;
+    lineW = state.lineW !== undefined ? state.lineW : 2.5;
+    threeLineMode = state.threeLineMode !== undefined ? state.threeLineMode : true;
+    activeRow = 0;
+    if (state.title) document.getElementById('mainTitle').value = state.title;
+    document.getElementById('yMinInput').value = yMin.toFixed(1);
+    document.getElementById('yMaxInput').value = yMax.toFixed(1);
+    document.getElementById('smoothness').value = smoothness;
+    document.getElementById('smoothVal').textContent = smoothness.toFixed(2);
+    document.getElementById('lineWidth').value = lineW;
+    document.getElementById('lineWidthVal').textContent = lineW.toFixed(1);
+    document.getElementById('threeLineBtn').classList.toggle('active', threeLineMode);
+    document.getElementById('gridLineBtn').classList.toggle('active', !threeLineMode);
+    updateColorUI();
+    renderTable();
+  } catch (err) {
+    alert('加载失败: ' + err.message);
+  }
+}
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  const state = getFullState();
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '波浪图存档_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('loadBtn').addEventListener('click', () => {
+  document.getElementById('loadFileInput').click();
+});
+
+document.getElementById('loadFileInput').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const state = JSON.parse(e.target.result);
+      restoreFullState(state);
+    } catch (err) {
+      alert('文件解析失败: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  this.value = '';
+});
+
+// ====== 导出PNG（纯Canvas渲染，不用SVG foreignObject） ======
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const container = document.getElementById('tableContainer');
+  const table = document.getElementById('waveTable');
+  const scale = 2;
+  const rect = container.getBoundingClientRect();
+  const titleText = document.getElementById('mainTitle').value;
+
+  const titleSpace = titleText ? 36 : 0; // 标题占用的垂直空间
+  const W = rect.width * scale;
+  const H = (rect.height + titleSpace) * scale;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.scale(scale, scale);
+  const tableLeft = rect.left, tableTop = rect.top;
+  const yShift = titleSpace; // 表格内容整体下移
+
+  // 0. 画标题
+  if (titleText) {
+    ctx.fillStyle = '#222';
+    ctx.font = 'bold 16px "Segoe UI","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(titleText, rect.width / 2, 6);
+  }
+
+  // 1. 画所有单元格背景和文字
+  const rows = table.querySelectorAll('tr');
+  rows.forEach((tr, ri) => {
+    const cells = tr.querySelectorAll('th, td');
+    cells.forEach(td => {
+      const cr = td.getBoundingClientRect();
+      const x = cr.left - tableLeft, y = cr.top - tableTop + yShift, w = cr.width, h = cr.height;
+
+      ctx.fillStyle = ri === 0 ? '#f8f8f5' : '#fff';
+      ctx.fillRect(x, y, w, h);
+
+      const inp = td.querySelector('input, textarea');
+      let text = inp ? (inp.value || '') : td.textContent.replace(/×/g, '').trim();
+      if (text && !td.classList.contains('wave-cell') && !td.querySelector('button')) {
+        ctx.fillStyle = '#222';
+        ctx.font = ri === 0 ? 'bold 12px "Segoe UI","Microsoft YaHei",sans-serif' : '12px "Segoe UI","Microsoft YaHei",sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        ctx.save();
+        ctx.beginPath(); ctx.rect(x + 3, y + 2, w - 6, h - 4); ctx.clip();
+        ctx.fillText(text, x + w / 2, y + h / 2);
+        ctx.restore();
+      }
+    });
+  });
+
+  // 2. 画表格线
+  if (threeLineMode) {
+    const firstRow = rows[0], lastRow = rows[rows.length - 1];
+    if (firstRow) {
+      const fr = firstRow.getBoundingClientRect();
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(fr.left - tableLeft, fr.top - tableTop + yShift); ctx.lineTo(fr.right - tableLeft, fr.top - tableTop + yShift); ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = '#666';
+      ctx.beginPath(); ctx.moveTo(fr.left - tableLeft, fr.bottom - tableTop + yShift); ctx.lineTo(fr.right - tableLeft, fr.bottom - tableTop + yShift); ctx.stroke();
+    }
+    if (lastRow) {
+      const lr = lastRow.getBoundingClientRect();
+      ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(lr.left - tableLeft, lr.bottom - tableTop + yShift); ctx.lineTo(lr.right - tableLeft, lr.bottom - tableTop + yShift); ctx.stroke();
+    }
+  } else {
+    rows.forEach(tr => {
+      tr.querySelectorAll('th, td').forEach(td => {
+        const cr = td.getBoundingClientRect();
+        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 0.5;
+        ctx.strokeRect(cr.left - tableLeft, cr.top - tableTop + yShift, cr.width, cr.height);
+      });
+    });
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+    ctx.strokeRect(0, yShift, rect.width, rect.height);
+  }
+
+  // 3. 画波浪
+  document.querySelectorAll('.wave-canvas').forEach(origCanvas => {
+    const ri = parseInt(origCanvas.dataset.ri);
+    if (ri >= rowData.length) return;
+    const cr = origCanvas.getBoundingClientRect();
+    const ox = cr.left - tableLeft, oy = cr.top - tableTop + yShift;
+    const tmpC = document.createElement('canvas');
+    tmpC.width = cr.width * scale; tmpC.height = cr.height * scale;
+    const tctx = tmpC.getContext('2d');
+    tctx.scale(scale, scale);
+    const w = cr.width, h = cr.height;
+    const padL = 14, padR = 14, padT = 14, padB = 14;
+    drawWaveExport(tctx, rowData[ri], w, h, padL, padR, padT, padB, w - padL - padR, h - padT - padB);
+    ctx.drawImage(tmpC, ox, oy, cr.width, cr.height);
+  });
+
+  const link = document.createElement('a');
+  link.download = '波浪图_' + new Date().toISOString().slice(0,10) + '.png';
+  link.href = c.toDataURL('image/png');
+  link.click();
+});
+
+// 导出用的简化wave绘制（无调节线、无控制点）
+function drawWaveExport(ctx, row, w, h, padL, padR, padT, padB, pw, ph) {
+  // 零线
+  const zeroY = padT + ph * (1 - (0 - yMin) / (yMax - yMin));
+  if (zeroY > padT && zeroY < padT + ph) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(padL, zeroY);
+    ctx.lineTo(w - padR, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(padL, padT, pw, ph);
+  ctx.clip();
+
+  const pts = row.points;
+  const spline = getSplinePoints(pts);
+
+  ctx.fillStyle = row.color + '15';
+  ctx.beginPath();
+  let first = dataToCanvas(pts[0].x, pts[0].y, padL, pw, padT, ph);
+  ctx.moveTo(first.x, first.y);
+  for (const sp of spline) {
+    const s = dataToCanvas(sp.x, sp.y, padL, pw, padT, ph);
+    ctx.lineTo(s.x, s.y);
+  }
+  let last = dataToCanvas(pts[pts.length - 1].x, pts[pts.length - 1].y, padL, pw, padT, ph);
+  ctx.lineTo(last.x, padT + ph);
+  ctx.lineTo(first.x, padT + ph);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = row.color;
+  ctx.lineWidth = lineW;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = row.color;
+  ctx.shadowBlur = 3;
+  ctx.beginPath();
+  first = dataToCanvas(pts[0].x, pts[0].y, padL, pw, padT, ph);
+  ctx.moveTo(first.x, first.y);
+  for (const sp of spline) {
+    const s = dataToCanvas(sp.x, sp.y, padL, pw, padT, ph);
+    ctx.lineTo(s.x, s.y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // 控制点（导出也包含）
+  pts.forEach((p, pi) => {
+    const s = dataToCanvas(p.x, p.y, padL, pw, padT, ph);
+    ctx.fillStyle = row.color;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+// ====== 键盘 ======
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowUp') {
+    activeRow = Math.max(0, activeRow - 1);
+    updateActiveRowUI();
+    drawAllWaves();
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    activeRow = Math.min(rowData.length - 1, activeRow + 1);
+    updateActiveRowUI();
+    drawAllWaves();
+    e.preventDefault();
+  }
+});
+
+// ====== 响应式 ======
+window.addEventListener('resize', () => { drawAllWaves(); });
+
+// ====== 列宽拖拽调节（所有列） + 宽度指示器 ======
+let colResizeDragging = null;
+let widthIndicator = null;
+
+// 创建宽度指示器（浮层，不在导出图中）
+function ensureWidthIndicator() {
+  if (!widthIndicator) {
+    widthIndicator = document.createElement('div');
+    widthIndicator.style.cssText = 'position:fixed;background:#333;color:#fff;padding:3px 8px;border-radius:4px;font-size:11px;pointer-events:none;z-index:999;display:none;font-family:monospace';
+    document.body.appendChild(widthIndicator);
+  }
+}
+
+document.addEventListener('mousedown', function(e) {
+  const handle = e.target.closest && e.target.closest('.col-resize-handle');
+  if (!handle) return;
+  const colIdx = parseInt(handle.dataset.col);
+  if (isNaN(colIdx)) return;
+  const td = handle.parentElement;
+  colResizeDragging = { colIdx, startX: e.clientX, startWidth: td.offsetWidth };
+  document.querySelectorAll('.col-resize-handle').forEach(h => h.classList.add('active'));
+  ensureWidthIndicator();
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', function(e) {
+  if (!colResizeDragging) return;
+  const dx = e.clientX - colResizeDragging.startX;
+  const colIdx = colResizeDragging.colIdx;
+  // 不同列设不同的最小宽度
+  const minW = colIdx === 0 ? 50 : colIdx === 1 ? 150 : colIdx >= colWidths.length - 1 ? 28 : 50;
+  const newW = Math.max(minW, colResizeDragging.startWidth + dx);
+  colWidths[colIdx] = newW;
+
+  // 更新所有对应列的单元格
+  const selector = `td:nth-child(${colIdx + 1}), th:nth-child(${colIdx + 1})`;
+  document.querySelectorAll(selector).forEach(el => {
+    el.style.width = newW + 'px';
+  });
+
+  // 显示宽度指示器
+  widthIndicator.style.display = 'block';
+  widthIndicator.style.left = (e.clientX + 12) + 'px';
+  widthIndicator.style.top = (e.clientY - 20) + 'px';
+  widthIndicator.textContent = newW + 'px';
+
+  // 波浪列需要重绘
+  if (colIdx === 1) drawAllWaves();
+});
+
+document.addEventListener('mouseup', function() {
+  if (colResizeDragging) {
+    document.querySelectorAll('.col-resize-handle').forEach(h => h.classList.remove('active'));
+    colResizeDragging = null;
+    if (widthIndicator) widthIndicator.style.display = 'none';
+  }
+});
+
+// ====== 浮动面板拖拽 ======
+(function() {
+  const panel = document.getElementById('floatPanel');
+  const handle = document.getElementById('fpDragHandle');
+  let isDragging = false, startX, startY, startLeft, startTop;
+
+  handle.addEventListener('mousedown', function(e) {
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    const rect = panel.getBoundingClientRect();
+    startLeft = rect.left;
+    startTop = rect.top;
+    panel.style.right = 'auto';
+    panel.style.left = startLeft + 'px';
+    panel.style.top = startTop + 'px';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    panel.style.left = (startLeft + dx) + 'px';
+    panel.style.top = (startTop + dy) + 'px';
+  });
+
+  window.addEventListener('mouseup', function() {
+    isDragging = false;
+  });
+})();
+
+// ====== 启动 ======
+function init() {
+  initData();
+  renderPresetColors();
+  renderTable();
+}
+init();
+</script>
+</body>
+</html>
