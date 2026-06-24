@@ -1,0 +1,386 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D山岭图生成器</title>
+<script src="https://cdn.plot.ly/plotly-3.0.0.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;min-height:100vh}
+.header{background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);padding:18px 24px;text-align:center;border-bottom:2px solid #f0c040}
+.header h1{font-size:1.6em;background:linear-gradient(90deg,#f0c040,#4da6ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.header span{font-size:0.8em;color:#888}
+.container{display:flex;flex-wrap:wrap;gap:16px;padding:16px;max-width:1600px;margin:0 auto;height:calc(100vh - 110px)}
+.panel{background:#16213e;border-radius:12px;padding:16px;border:1px solid #2a3a5e}
+.control-panel{width:380px;min-width:320px;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+.plot-panel{flex:1;min-width:500px}
+.plot-panel #plot{width:100%;height:100%;border-radius:8px}
+label{font-size:0.85em;font-weight:600;color:#aaa;margin-bottom:2px;display:block}
+input,select,textarea{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #3a4a6e;background:#0f0f23;color:#e0e0e0;font-size:0.9em;font-family:inherit;transition:border .2s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#f0c040}
+textarea{resize:vertical;font-family:'Consolas','Courier New',monospace;font-size:0.82em;line-height:1.5;min-height:180px}
+.btn-row{display:flex;gap:8px}
+.btn{padding:10px 20px;border-radius:8px;border:none;font-size:0.95em;font-weight:600;cursor:pointer;transition:all .2s;flex:1}
+.btn-go{background:linear-gradient(135deg,#f0c040,#e0a020);color:#1a1a2e}
+.btn-go:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(240,192,64,0.4)}
+.btn-clear{background:#2a3a5e;color:#ccc}
+.btn-clear:hover{background:#3a4a7e}
+.btn-example{background:#1a3a2e;color:#8ecb6e}
+.btn-example:hover{background:#2a5a3e}
+.preview-colors{display:flex;gap:4px;height:20px;border-radius:4px;overflow:hidden;margin-top:4px}
+.preview-colors span{flex:1}
+.info{font-size:0.75em;color:#666;text-align:center;margin-top:8px}
+.tag{display:inline-block;padding:3px 8px;border-radius:4px;font-size:0.7em;margin:2px}
+.tag-csv{background:#2a3a5e;color:#8ab4f8}
+.tag-excel{background:#1a3a2e;color:#8ecb6e}
+::placeholder{color:#555}
+@media(max-width:800px){.container{flex-direction:column;height:auto}.control-panel{width:100%}.plot-panel{min-height:500px}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⛰️ 3D 山岭图生成器</h1>
+  <span>输入数据 → 即时生成 → 交互式3D图 | 手机/电脑都能用</span>
+</div>
+<div class="container">
+  <div class="panel control-panel">
+    <div>
+      <label>📊 数据 <span class="tag tag-csv">CSV</span> <span class="tag tag-excel">粘贴</span></label>
+      <textarea id="dataInput" placeholder="name,value,ci_low,ci_high,weight,group
+研究A,0.5,0.2,0.8,25.0,亚组1
+研究B,0.3,-0.1,0.7,30.0,亚组2
+研究C,-0.2,-0.6,0.2,20.0,亚组1
+汇总,0.15,-0.1,0.4,100.0,Overall"></textarea>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>🏷️ 标题</label><input id="titleInput" placeholder="输入图表标题..."></div>
+      <div style="flex:1"><label>✍️ 署名</label><input id="authorInput" placeholder="输入署名..."></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>📐 X轴标签</label><input id="xlabelInput" value="Study / Subgroup"></div>
+      <div style="flex:1"><label>📏 Y轴标签</label><input id="ylabelInput" value="Effect Size"></div>
+    </div>
+    <div>
+      <label>🎨 配色方案</label>
+      <select id="colorschemeSelect">
+        <option value="golden" selected>金黄 → 蓝色 (默认)</option>
+        <option value="forest">深绿 → 天蓝 (森林)</option>
+        <option value="ocean">深海 → 亮蓝 (海洋)</option>
+        <option value="sunset">暗红 → 金黄 (日落)</option>
+        <option value="glacier">深紫 → 冰白 (冰川)</option>
+        <option value="lava">黑 → 熔岩金 (火山)</option>
+        <option value="aurora">暗夜 → 极光绿 (极光)</option>
+      </select>
+      <div class="preview-colors" id="colorPreview"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-go" onclick="generate()">🚀 生成山岭图</button>
+      <button class="btn btn-example" onclick="loadExample()">📋 示例</button>
+      <button class="btn btn-clear" onclick="clearAll()">🗑️ 清空</button>
+    </div>
+    <div class="info">💡 列名自动识别: name/value/ci_low/ci_high/weight/group<br>支持中英文列名 | 至少需要 name 和 value 两列</div>
+  </div>
+  <div class="panel plot-panel">
+    <div id="plot"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 配色方案定义 (与Python工具一致)
+// ============================================================
+const COLORSCHEMES = {
+  golden:  { surface: [[0,'rgb(15,10,3)'],[0.12,'rgb(50,35,5)'],[0.25,'rgb(120,90,15)'],[0.4,'rgb(200,160,30)'],[0.55,'rgb(240,210,60)'],[0.7,'rgb(180,200,100)'],[0.85,'rgb(80,180,220)'],[1,'rgb(50,140,255)']], name:'金黄→蓝' },
+  forest:  { surface: [[0,'rgb(3,10,3)'],[0.1,'rgb(5,35,10)'],[0.25,'rgb(0,80,30)'],[0.45,'rgb(10,140,70)'],[0.65,'rgb(40,190,140)'],[0.82,'rgb(70,215,220)'],[1,'rgb(110,230,255)']], name:'深绿→天蓝' },
+  ocean:   { surface: [[0,'rgb(2,5,30)'],[0.15,'rgb(5,25,70)'],[0.35,'rgb(10,60,130)'],[0.55,'rgb(30,120,200)'],[0.75,'rgb(60,180,240)'],[1,'rgb(130,230,255)']], name:'深海→亮蓝' },
+  sunset:  { surface: [[0,'rgb(40,5,20)'],[0.15,'rgb(80,15,30)'],[0.35,'rgb(160,50,40)'],[0.55,'rgb(220,120,60)'],[0.75,'rgb(250,180,100)'],[1,'rgb(255,230,180)']], name:'暗红→金黄' },
+  glacier: { surface: [[0,'rgb(20,20,60)'],[0.2,'rgb(40,60,120)'],[0.4,'rgb(80,130,200)'],[0.6,'rgb(160,200,240)'],[0.8,'rgb(210,235,255)'],[1,'rgb(240,250,255)']], name:'深紫→冰白' },
+  lava:    { surface: [[0,'rgb(5,5,5)'],[0.15,'rgb(40,10,5)'],[0.35,'rgb(140,30,10)'],[0.55,'rgb(230,100,20)'],[0.75,'rgb(255,180,40)'],[1,'rgb(255,240,120)']], name:'黑→熔岩金' },
+  aurora:  { surface: [[0,'rgb(5,15,30)'],[0.2,'rgb(20,60,80)'],[0.4,'rgb(40,140,120)'],[0.6,'rgb(100,210,140)'],[0.8,'rgb(180,240,180)'],[1,'rgb(230,255,230)']], name:'暗夜→极光绿' },
+};
+
+const GROUP_COLORS = ['#2196F3','#FF9800','#F44336','#9C27B0','#4CAF50','#00BCD4','#E91E63','#795548'];
+
+// ============================================================
+// CSV 解析 (支持逗号/制表符/竖线分隔)
+// ============================================================
+function parseCSV(text) {
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return null;
+
+  // 检测分隔符
+  const sep = lines[0].includes('\t') ? '\t' : lines[0].includes('|') ? '|' : ',';
+
+  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase());
+  const colMap = {
+    name: ['name','study','title','名称','研究','标题','label'],
+    value: ['value','smd','md','effect','es','or','rr','hr','值','效应量','影响因子'],
+    ci_low: ['ci_low','ci_lower','lower','lo','cilo','ci下限','下限'],
+    ci_high: ['ci_high','ci_upper','upper','hi','cihi','ci上限','上限'],
+    weight: ['weight','w','权重','weight(%)','weight%','wt'],
+    group: ['group','subgroup','category','分组','亚组','类别','grp'],
+  };
+
+  const mapping = {};
+  for (const [key, candidates] of Object.entries(colMap)) {
+    for (const c of candidates) {
+      const idx = headers.indexOf(c);
+      if (idx >= 0) { mapping[key] = idx; break; }
+    }
+  }
+  if (!('name' in mapping) || !('value' in mapping)) {
+    alert('错误: 至少需要 name 和 value 列。\n找到的列: ' + headers.join(', '));
+    return null;
+  }
+
+  const data = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(sep).map(c => c.trim());
+    const name = cols[mapping.name];
+    if (!name) continue;
+    const val = parseFloat(cols[mapping.value]);
+    if (isNaN(val)) continue;
+
+    let ciLow = mapping.ci_low !== undefined ? parseFloat(cols[mapping.ci_low]) : NaN;
+    let ciHigh = mapping.ci_high !== undefined ? parseFloat(cols[mapping.ci_high]) : NaN;
+    let weight = mapping.weight !== undefined ? parseFloat(cols[mapping.weight]) : NaN;
+    const group = mapping.group !== undefined ? (cols[mapping.group] || '') : '';
+
+    if (isNaN(ciLow)) ciLow = val - Math.abs(val) * 0.3;
+    if (isNaN(ciHigh)) ciHigh = val + Math.abs(val) * 0.3;
+    if (isNaN(weight) || weight <= 0) weight = 0.1;
+
+    data.push({ name, val, ciLow, ciHigh, weight, group });
+  }
+  return data;
+}
+
+// ============================================================
+// 生成 3D 山岭图
+// ============================================================
+function generate() {
+  const dataText = document.getElementById('dataInput').value.trim();
+  if (!dataText) { alert('请先输入数据！'); return; }
+
+  const data = parseCSV(dataText);
+  if (!data || data.length === 0) { alert('无法解析数据，请检查格式。'); return; }
+
+  const title = document.getElementById('titleInput').value || '3D Ridge Plot';
+  const author = document.getElementById('authorInput').value || '';
+  const colorscheme = document.getElementById('colorschemeSelect').value;
+  const xlabel = document.getElementById('xlabelInput').value || 'Study';
+  const ylabel = document.getElementById('ylabelInput').value || 'Effect Size';
+  const cs = COLORSCHEMES[colorscheme];
+
+  // 分组颜色
+  const groups = [...new Set(data.map(d => d.group).filter(Boolean))];
+  if (groups.length === 0) groups.push('Default');
+  const groupColors = {};
+  groups.forEach((g, i) => { groupColors[g] = GROUP_COLORS[i % GROUP_COLORS.length]; });
+
+  const n = data.length;
+
+  // Y轴范围
+  const allY = data.map(d => d.val);
+  const allCiLow = data.map(d => d.ciLow);
+  const allCiHigh = data.map(d => d.ciHigh);
+  const yPad = (Math.max(...allCiHigh) - Math.min(...allCiLow)) * 0.15 || 1;
+  const yMin = Math.min(...allCiLow) - yPad;
+  const yMax = Math.max(...allCiHigh) + yPad;
+
+  // 构建网格
+  const yGridSize = 400;
+  const xGridSize = n * 20;
+  const yGrid = Array.from({length: yGridSize}, (_, i) => yMin + (yMax - yMin) * i / (yGridSize - 1));
+  const xGrid = Array.from({length: xGridSize}, (_, i) => -0.5 + (n - 0.5 + 0.5) * i / (xGridSize - 1));
+
+  // 初始化Z矩阵
+  const Z = Array.from({length: yGridSize}, () => new Float64Array(xGridSize));
+
+  // 叠加高斯山脊
+  data.forEach((d, i) => {
+    const center = d.val;
+    const ciWidth = Math.max(d.ciHigh - d.ciLow, 0.01);
+    const sigma = Math.max(ciWidth / 4.0, 0.08);
+    const w = Math.max(d.weight, 0.1);
+    const amplitude = Math.pow(w / 100.0, 0.55) * 2.2;
+    const xSigma = 0.25;
+
+    for (let j = 0; j < xGridSize; j++) {
+      const xWeight = Math.exp(-0.5 * Math.pow((xGrid[j] - i) / xSigma, 2));
+      if (xWeight < 0.01) continue;
+      for (let k = 0; k < yGridSize; k++) {
+        const ridge = amplitude * Math.exp(-0.5 * Math.pow((yGrid[k] - center) / sigma, 2));
+        Z[k][j] += ridge * xWeight;
+      }
+    }
+  });
+
+  // ====== 构建 Plotly 图表 ======
+  const traces = [];
+
+  // 主曲面
+  traces.push({
+    type: 'surface',
+    x: xGrid, y: yGrid, z: Z,
+    colorscale: cs.surface,
+    opacity: 0.85,
+    showscale: true,
+    colorbar: { title: '密度', x: 1.02, thickness: 20, len: 0.6 },
+    contours: { z: { show: true, usecolormap: true, highlightcolor: 'white', project: { z: false }, width: 1 } },
+    lighting: { ambient: 0.4, diffuse: 0.8, fresnel: 0.3, specular: 0.5, roughness: 0.3 },
+    lightposition: { x: 3000, y: 5000, z: 8000 },
+    name: '山岭曲面',
+  });
+
+  // 数据点 + CI线
+  data.forEach((d, i) => {
+    const color = groupColors[d.group] || '#757575';
+    const w = Math.max(d.weight, 0.1);
+    const zVal = Math.pow(w / 100.0, 0.55) * 2.2;
+
+    // 数据点
+    traces.push({
+      type: 'scatter3d', mode: 'markers+text',
+      x: [i], y: [d.val], z: [zVal + 0.03],
+      marker: { size: w * 0.12 + 3, color, line: { color: 'white', width: 1.5 } },
+      text: [d.name], textposition: 'top center',
+      textfont: { size: 9, color: 'black' },
+      hovertext: [`<b>${d.name}</b><br>Value: ${d.val.toFixed(2)}<br>95%CI: [${d.ciLow.toFixed(2)}, ${d.ciHigh.toFixed(2)}]<br>Weight: ${d.weight.toFixed(1)}%<br>Group: ${d.group}`],
+      hoverinfo: 'text', showlegend: false,
+    });
+
+    // CI 线
+    const ciN = 40;
+    const ciY = Array.from({length: ciN}, (_, k) => d.ciLow + (d.ciHigh - d.ciLow) * k / (ciN - 1));
+    traces.push({
+      type: 'scatter3d', mode: 'lines',
+      x: Array(ciN).fill(i), y: ciY, z: Array(ciN).fill(0.01),
+      line: { color, width: 3 },
+      hoverinfo: 'skip', showlegend: false,
+    });
+
+    // CI 端点
+    [d.ciLow, d.ciHigh].forEach(ep => {
+      traces.push({
+        type: 'scatter3d', mode: 'markers',
+        x: [i], y: [ep], z: [0.02],
+        marker: { size: 3, color, symbol: 'diamond' },
+        hoverinfo: 'skip', showlegend: false,
+      });
+    });
+  });
+
+  // 分组标签
+  const groupRanges = {};
+  data.forEach((d, i) => {
+    const g = d.group || 'Default';
+    if (!groupRanges[g]) groupRanges[g] = [i, i];
+    groupRanges[g][1] = i;
+  });
+  for (const [g, [s, e]] of Object.entries(groupRanges)) {
+    const mid = (s + e) / 2;
+    const color = groupColors[g] || '#757575';
+    traces.push({
+      type: 'scatter3d', mode: 'text',
+      x: [mid], y: [yMin - (yMax - yMin) * 0.05], z: [0],
+      text: [g], textfont: { size: 12, color, family: 'Arial Black' },
+      hoverinfo: 'skip', showlegend: false,
+    });
+  }
+
+  // 图例
+  for (const [g, color] of Object.entries(groupColors)) {
+    traces.push({
+      type: 'scatter3d', mode: 'markers',
+      x: [null], y: [null], z: [null],
+      marker: { size: 10, color }, name: g,
+    });
+  }
+
+  // 标题文本
+  let titleText = `<b>${title}</b>`;
+  if (author) titleText += `<br><sub>—— ${author}</sub>`;
+
+  const layout = {
+    title: { text: titleText, x: 0.5, xanchor: 'center', font: { size: 18, family: 'Arial' } },
+    scene: {
+      xaxis: {
+        title: xlabel,
+        tickmode: 'array',
+        tickvals: data.map((_, i) => i),
+        ticktext: data.map(d => d.name),
+        tickfont: { size: 8 },
+        range: [-1, n],
+        gridcolor: 'rgba(200,200,200,0.3)',
+        backgroundcolor: 'rgba(240,240,245,0.5)',
+      },
+      yaxis: {
+        title: ylabel,
+        range: [yMin, yMax],
+        gridcolor: 'rgba(200,200,200,0.3)',
+        backgroundcolor: 'rgba(240,240,245,0.5)',
+      },
+      zaxis: {
+        title: '权重 (高度)',
+        range: [0, 2.5],
+        gridcolor: 'rgba(200,200,200,0.3)',
+        backgroundcolor: 'rgba(240,240,245,0.5)',
+      },
+      camera: { eye: { x: 1.6, y: -1.8, z: 1.2 }, up: { x: 0, y: 0, z: 1 } },
+      aspectmode: 'manual',
+      aspectratio: { x: 1.2, y: 1.0, z: 0.7 },
+      bgcolor: 'white',
+    },
+    margin: { l: 0, r: 0, t: 100, b: 0 },
+    hovermode: 'closest',
+    paper_bgcolor: '#16213e',
+  };
+
+  Plotly.newPlot('plot', traces, layout, { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['sendDataToCloud'] });
+  document.getElementById('plot').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ============================================================
+// 加载示例数据
+// ============================================================
+function loadExample() {
+  document.getElementById('dataInput').value = `name,value,ci_low,ci_high,weight,group
+Avci 2020,8.82,7.25,10.40,16.3,mPAP
+Simsek 2018,8.33,7.18,9.48,16.8,mPAP
+Yigit 2022,13.59,11.03,16.16,14.7,mPAP
+Subtotal mPAP,9.99,7.47,12.51,47.8,mPAP
+Avci 2020,0.09,-0.37,0.56,17.4,EF/LVEF
+Simsek 2018,-0.08,-0.45,0.28,17.4,EF/LVEF
+Ulusoy 2020,-0.19,-0.70,0.33,17.4,EF/LVEF
+Subtotal EF/LVEF,-0.06,-0.31,0.19,52.2,EF/LVEF
+Overall Pooled,-0.10,-0.30,0.10,100,Overall`;
+  document.getElementById('titleInput').value = 'mPAP Meta-Analysis';
+  document.getElementById('authorInput').value = '';
+  generate();
+}
+
+function clearAll() {
+  document.getElementById('dataInput').value = '';
+  document.getElementById('titleInput').value = '';
+  document.getElementById('authorInput').value = '';
+  Plotly.purge('plot');
+}
+
+// ============================================================
+// 颜色预览更新
+// ============================================================
+function updateColorPreview() {
+  const cs = COLORSCHEMES[document.getElementById('colorschemeSelect').value];
+  const preview = document.getElementById('colorPreview');
+  preview.innerHTML = cs.surface.map(s => `<span style="background:${s[1]}"></span>`).join('');
+}
+document.getElementById('colorschemeSelect').addEventListener('change', updateColorPreview);
+updateColorPreview();
+
+// 自动加载示例
+loadExample();
+</script>
+</body>
+</html>
